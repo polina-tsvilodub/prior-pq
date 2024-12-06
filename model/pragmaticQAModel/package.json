@@ -1,0 +1,20 @@
+{
+  "name": "pragmaticQAModel",
+  "main": "pragmaticQAModel.js",
+  "version": "0.0.2",
+  "webppl": {
+    "wppl": ["terminalViz.webppl",
+             "utilityFunctions.webppl",
+             "contextHelpers.webppl",
+             "contextModels-creditCards-Priors.webppl",
+             "contextModels-pieCake.webppl",
+             "contextModels-TSO.webppl",
+             "contextModels-TSOS.webppl",
+             "pragmaticQA-core-model.webppl"
+            ]
+  },
+  "dependencies": {
+    "lodash": "^4.17.21",
+    "webppl": "^0.9.10"
+  }
+}
