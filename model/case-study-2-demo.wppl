@@ -1,0 +1,94 @@
+var params =
+    {
+        policyAlpha     : 1.0,
+        questionerAlpha : 9.0,
+        R1Alpha         : 7.0,
+        relevanceBetaR1 : 0.1,
+        costWeight      : 1.5,
+        questionCost    : 0.0
+    }
+
+var contextTarget = extend(
+    tsoContext,
+    {decisionProblem : function(w, a) {
+        return _.includes(w, a) ?
+            (a == 'target' ? 96.18 :
+             a == 'competitor' ? 56.93 :
+             a == 'sameCat' ? 36.11 : 23.69) :
+            0.0000001;
+    }}
+)
+
+var contextCompetitor = extend(
+    tsoContext,
+    {decisionProblem : function(w, a) {
+        return _.includes(w, a) ?
+            (a == 'target' ? 55.55583 :
+             a == 'competitor' ? 95.21075 :
+             a == 'sameCat' ? 38.14870 : 24.85163) :
+            0.0000001;
+    }}
+)
+
+
+var contextSameCat = extend(
+    tsoContext,
+    {decisionProblem : function(w, a) {
+        return _.includes(w, a) ?
+            (a == 'target' ? 40.08662 :
+             a == 'competitor' ? 39.58796 :
+             a == 'sameCat' ? 95.03768 : 26.15277) :
+            0.0000001;
+    }}
+)
+
+var contextOtherCat = extend(
+    tsoContext,
+    {decisionProblem : function(w, a) {
+        return _.includes(w, a) ?
+            (a == 'target' ? 24.08933 :
+             a == 'competitor' ? 25.47491 :
+             a == 'sameCat' ? 25.37159 : 95.64791) :
+            0.0000001;
+    }}
+)
+
+var identity = extend(
+    tsoContext,
+    {decisionProblem : function(w, a) {
+        return _.includes(w, a) ?
+            (a == 'target' ? 100 :
+             a == 'competitor' ? 0 :
+             a == 'sameCat' ? 0 : 0) :
+            0.0000001;
+    }}
+)
+
+var question = tsoContext.questions[0];
+
+// R1 uncertain
+var R1Prior = {
+    target: contextTarget,
+    competitor: contextCompetitor,
+    sameCat: contextSameCat,
+    otherCat: contextOtherCat,
+    identity: identity,
+    distribution: Categorical({vs: ["target", "competitor", "sameCat", "otherCat", "identity"]})
+}
+
+var R1Prediction = R1Averager(tsoContext, R1Prior, question, params)
+var R1PredictionReduced = Infer({method: 'enumerate'}, function() {
+    var response = sample(R1Prediction);
+    return response == 'no.---' ? 'taciturn' :
+	response == 'no.competitor' ? 'competitor' :
+	response == 'no.sameCat' ? 'sameCat' :
+	response == 'no.otherCat' ? 'otherCat' :
+	response == 'no.competitor+sameCat' ? 'sameCat' :
+	response == 'no.competitor+otherCat' ? 'otherCat' :
+	response == 'no.sameCat+otherCat' ? 'otherCat' :
+	response == 'no.competitor+sameCat+otherCat' ? 'exhaustive' :
+	'other'
+    return(response)
+})
+console.log("R1-Averager:")
+terminalViz(R1PredictionReduced, 4)

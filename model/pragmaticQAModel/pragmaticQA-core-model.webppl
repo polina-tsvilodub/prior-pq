@@ -68,19 +68,6 @@ var questionUtility = function(utterance, beliefs, context, params) {
   return actionUtility - cost(utterance, params);
 };
 
-// DEPRECATED: currently only used in (deprecated) R1Sampler
-// // responder wants to bring questioner's beliefs and/or action policy
-// // as close to their own as possible
-// var answerUtility = function(utterance, beliefs1, beliefs2, context, relevanceBeta, params) {
-//   // respondent wants to *minimize* KL b/w beliefs (bringing closer to own belief)
-//   var epistemicUtility = -KL(beliefs1, beliefs2);
-//   var actionUtility = -KL(getActionPolicy(beliefs1, context, params),
-//                           getActionPolicy(beliefs2, context, params));
-//   return ((1 - relevanceBeta) * epistemicUtility
-//           + relevanceBeta * actionUtility
-//           - cost(utterance, params));
-// };
-
 // base-level respondent chooses any safe and true answer
 // with equal probability;
 // by construction, the function getLicensedResponseR0(question)
@@ -197,27 +184,6 @@ var R1ContextPosterior = cache(function(context, question, R1PriorContext, param
   )
 })
 
-// // DEPRECATED R1Sampler is a sampling-based non-normative agent
-// var R1Sampler = cache(function(context, R1PriorContext, question, params) {
-//   var getLicensedResponsesR1 = context.getLicensedResponsesR1;
-//   var responses = filter(function(r) {!isContradiction(context, question, r)},
-//                          getLicensedResponsesR1(question));
-//   return Infer({method: 'enumerate'}, function(){
-//     var context_label  = sample(R1PriorContext.distribution);
-//     var context_sample = extend(
-//       R1PriorContext[context_label],
-//       {R1PriorOverWorlds: context.R1PriorOverWorlds});
-//     var questioner = Q1(context_sample, params);
-//     factor(questioner.score(question.text));
-//     var response = uniformDraw(responses);
-//     var ownBeliefs = context.R1PriorOverWorlds;
-//     var otherBeliefs = updateBeliefs(context_sample.questionerBeliefs, question, response, context_sample);
-//     var utility = answerUtility(response, ownBeliefs, otherBeliefs, context_sample, params.relevanceBetaR1, params);
-//     factor(params.R1Alpha * utility);
-//     return {context_label, response};
-//   });
-// });
-
 // R1 Averager is full rational reasoner, integrating over all relevant uncertainty
 // key assumptions:
 // - R1 assumes that their responses will be exhaustified (currently with fixed alpha = 10);
@@ -226,37 +192,39 @@ var R1ContextPosterior = cache(function(context, question, R1PriorContext, param
 // - R1's beliefs (supplied by `R1PriorContext`) are a discrete distribution over contexts,
 //   which differ minimally, e.g, just in terms of preferences of the questioner
 var R1Averager = cache(function(context, R1PriorContext, question, params) {
-  // console.log("R1 averager ---------------\nquestion given: ", question);
+  console.log("R1 averager ---------------\nquestion given: ", question);
   var getLicensedResponsesR1 = context.getLicensedResponsesR1;
   var responses = filter(function(r) {!isContradiction(context, question, r)},
                          getLicensedResponsesR1(question));
-  // console.log("available responses: ", responses);
+  console.log("available responses: ", responses);
   var ownBeliefs = context.R1PriorOverWorlds;
   var contextPosterior = marginalize(R1ContextPosterior(context, question,
                                                         R1PriorContext, params), 'sample');
+  terminalViz(contextPosterior, 4)
+  console.log(sample(contextPosterior))
   return Infer({method: 'enumerate'}, function(){
     var response = uniformDraw(responses);
-    // console.log("\n\n\n\n\n\n **** Considering response: ", response);
+    console.log("\n\n\n\n\n\n **** Considering response: ", response);
     var expectedUtility = expectation(
       contextPosterior,
       function(context_sample) {
-        // console.log("\nContext sample: ", context_sample.name);
+        console.log("\nContext sample: ", context_sample.name);
         var otherBeliefs = updateBeliefsPragmaticR1(context_sample.questionerBeliefs,
                                                     question, response, context_sample, params);
-        // console.log("updated beliefs after response: ", response)
-        // terminalViz(otherBeliefs, 4)
+        console.log("updated beliefs after response: ", response)
+        terminalViz(otherBeliefs, 4)
         var decisionProblem = context_sample.decisionProblem;
         var actionPolicy = getActionPolicy(otherBeliefs, context_sample, params);
 
-        // console.log("action policy after response: ", response)
-        // terminalViz(actionPolicy, 4)
+        console.log("action policy after response: ", response)
+        terminalViz(actionPolicy, 4)
         var actionUtility = expectation(actionPolicy, function(action) {
           // weight possible actions proportional to reward
           return expectation(otherBeliefs, function(world) {
             return decisionProblem(world, action);
           });
         });
-        // console.log("action utility: ", actionUtility)
+        console.log("action utility: ", actionUtility)
         var EU = ((1-params.relevanceBetaR1) * -KL(ownBeliefs, otherBeliefs) +
                   params.relevanceBetaR1 * actionUtility -
                   cost(response,params))
