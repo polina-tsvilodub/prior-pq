@@ -1,0 +1,238 @@
+---
+title: "Case study 2"
+author: "PT"
+date: '2000-01-01'
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(tidyboot)
+library(brms)
+library(tidybayes)
+```
+
+```{r, include=FALSE}
+# these options help Stan run faster
+options(mc.cores = parallel::detectCores())
+```
+
+# Case study 2
+
+Below, the analyses of the experimental data in case study 2 can be found.
+
+## Free production experiment
+
+Below, the analysis of the free production case study 2  data can be found. In this experiment, the context is relatively uninformative regarding the goal of the questioner with respect to the target. The respondents may infer the questioners' goal based on the question itself.
+
+The responses from any agent (humans, LLMs, RSA model) were manually classified into the following categories: 
+
+* competitor: responses mentioning the anticipated competitor only
+* sameCategory: responses offering either the same category alternative or both the same category and competitor alternatives 
+* otherCategory: responses offering either the alternative from the different category only, or together with the competitor or the same category alternative
+* exhaustive: responses where all alternatives were listed (also in two sentences, where one offered the competitor only)
+* taciturn: responses not offering any alternative options or further alternative solutions
+* alternative: responses offering further steps towards solving the question but not fitting the categories above, e.g., responses using basic level categories (e.g., "dogs" instead of offering specific alternatives). Only applicable to human and LLM responses.
+* other_responses: remaining unclassifiable responses. Only applicable to human and LLM responses.
+
+In the human experiment, each subject saw *four main trials* and *one attention checking trial*. Participants failing attention checks were excluded from analysis. For LLMs, we sampled five responses for each vignette, in each prompting condition for each model.
+
+This script analyses manually annotated data, post exclusion of human participants who failed the attention checks.
+Alternative and other_response answers are excluded from main analyses.
+
+```{r, include=FALSE, warning=FALSE, message=FALSE}
+answerOrder <- c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList', 'other_response',  'alternative')
+answerLabels <- c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive', 'undefined responses', 'alternative')
+
+df_human <- read_csv("../data/human/case_study_2/e2_free_production_human_categorized.csv") %>%
+  select(itemName, answer, response_option, option_category, category) %>%
+  mutate(answerType = factor(category, levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList', 'other_response',  'alternative'), 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive', 'undefined responses', 'alternative'))) %>%
+  mutate(prompt = "human", model = "Humans")
+
+df_llms <- read_csv("../data/llms/case_study_2/e2_llms_results_annotated.csv") %>% 
+  mutate(answerType = factor(category, levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList', 'other_response',  'alternative'), 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive', 'undefined responses', 'alternative'))) %>% 
+  rename(answer = predictions) %>%
+  mutate(model = case_when(model == "gpt-4-0613" ~ "GPT-4",
+                           model == "meta-llama/Meta-Llama-3-70B-Instruct" ~ "Llama-3-70B-Inst.",
+                           model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
+                           TRUE ~ model))
+
+## TODO: read RSA data here 
+
+df_combined <- rbind(
+  df_human,
+  df_llms
+)
+```
+
+Below, plots are created. We plot the proportions of each response category for humans and each model, looking at LLM responses by prompting condition. We exclude the "alternative" and "other_response" answers from analyses and plots for the main text, and include them for full plots for the appendix.
+
+### Main analyses
+```{r, echo=FALSE, fig.height=6, fig.width=8}
+# human response 
+df_human_main <- df_human %>%
+  filter((answerType != "alternative") & (answerType != "undefined responses"))
+df_llms_main <- df_llms %>% 
+  filter((answerType != "alternative") & (answerType != "undefined responses"))
+
+df_human_main_summary <- df_human_main  %>%
+  group_by(prompt, answerType) %>% 
+  summarise(answerType_count = n(), 
+            answerType_proportion = answerType_count / nrow(df_human_main)
+            ) %>% 
+  mutate(model = "Humans",
+         model = factor(model, levels = c("Humans", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst.")))
+  
+df_llms_main_summary <- df_llms_main  %>%
+  group_by(model, prompt) %>% 
+  mutate(model_prompt_count = n()) %>%
+  group_by(model, prompt, answerType) %>% 
+  reframe(answerType_count = n(), 
+            answerType_proportion = answerType_count / model_prompt_count
+            )  %>% unique()
+```
+
+```{r}
+cbp1 <- c("#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+# plot LLM results 
+df_llms_main_summary %>% 
+  mutate(prompt = factor(prompt, levels = c("zero-shot", "one-shot Explanation", "one-shot QA", "one-shot CoT"), 
+                         labels = c("zero-shot\n(V)", "one-shot\nExplanation\n(I+II+IV+V)", "one-shot\nQA (I+III+IV+V)", "one-shot\nCoT (I-V)")),
+    model = factor(model, levels = c("Humans", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst."))) %>%
+  filter((prompt %in% c("one-shot\nCoT (I-V)", "zero-shot\n(V)") ) & (model == "Llama-3-70B-Inst.")) %>%
+  ggplot(., aes(x = prompt, y = answerType_proportion, fill = answerType)) +
+  geom_col(color = "#575463", width = 0.9)+ 
+  geom_col(data = df_human_main_summary, aes(x = prompt, y = answerType_proportion, fill = answerType), width = 0.9, color = "#575463") +
+    scale_fill_manual(values = cbp1) +
+  scale_y_continuous( breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)) +
+   theme(plot.title = element_text(hjust = 0.5),  legend.title = element_text(size=12), legend.text = element_text(size=12), axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 45, margin = margin(t = 10), size = 12)) +
+  ylab("") +
+  xlab("") +
+  facet_grid(.~model, scales = "free_x", space = "free_x") +
+  ggtitle("Do you have iced tea?")
+
+```
+
+Below some exploratory statistical analyses on human data are computed. The analyses investigate whether: 
+
+1. the competitor is the prevalent category  
+2. competitor is more prevalent than otherCategory
+3. competitor is more prevalent than fullList
+4. sameCategory is more prevalent than otherCategory
+5. sameCategory is more prevalent than fullList
+
+Check if the proportions of other response categories are credibly different from the competitor responses (competitor is coded as reference level in the dummy coding of the response categories). All intercepts are credible (all proportions are credibly smaller). That is, hypotheses 1-3 are supported by the data.
+
+```{r, warning=FALSE, message=FALSE, error=FALSE}
+df_human_main_stats <- df_human_main %>% 
+  mutate(answerType = factor(category, levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList')))
+
+contrasts(df_human_main_stats$answerType)
+
+# multinomial regression with intercept only
+multinom_brm <- brm(answerType ~ 1, 
+    data = df_human_main_stats, 
+    family = "categorical",
+    iter = 3000
+    )
+summary(multinom_brm)
+```
+
+Check if the number of sameCategory responses is larger than the number of fullList / otherCategory responses. Both estimates are credible, so hypotheses 4-5 are supported by the data, as well.
+```{r}
+multinom_posteriors <- multinom_brm %>% spread_draws(b_musameCategory_Intercept, b_muotherCategory_Intercept, b_mufullList_Intercept) %>%
+  mutate(
+    sameCategory_vs_fullList = b_musameCategory_Intercept - b_mufullList_Intercept,
+    sameCategory_vs_otherCategory = b_musameCategory_Intercept - b_muotherCategory_Intercept
+  )
+
+multinom_posteriors %>% select(sameCategory_vs_fullList, sameCategory_vs_otherCategory) %>%
+  gather(key, val) %>%
+  group_by(key) %>%
+  summarise(
+    '|95%' = quantile(val, probs = c(0.025, 0.975))[[1]],
+    'mean'  = mean(val),
+    '95%|' = quantile(val, probs = c(0.025, 0.975))[[2]],
+    prob_gt_0 = mean(val > 0)*100,
+    prob_lt_0 = mean(val < 0)*100
+  ) -> multinom_posteriors_summary
+
+multinom_posteriors_summary
+```
+
+Additionally, we fit a model regressing the response type against an intercept, treating all response types as one vs taciturn responses, in order to check that generally, participants are less likely to produce taciturn responses than anything else. The same analysis is conducted for full list vs everything else. 
+
+```{r, warning=FALSE, message=FALSE, error=FALSE}
+df_clean_main_binary <- df_clean_main %>% mutate(
+  answerType_taciturn = ifelse(answerType == "taciturn", "taciturn", "all"),
+  answerType_taciturn = factor(answerType_taciturn),
+  answerType_fullList = ifelse(answerType == "fullList", "fullList", "all"),
+  answerType_fullList = factor(answerType_fullList)
+)
+contrasts(df_clean_main_binary$answerType_taciturn)
+contrasts(df_clean_main_binary$answerType_fullList)
+
+# multinomial regression with intercept only
+taciturn_brm <- brm(answerType_taciturn ~ 1, 
+    data = df_clean_main_binary, 
+    family = "categorical",
+    iter = 3000
+    )
+summary(taciturn_brm)
+```
+
+```{r, warning=FALSE, message=FALSE, error=FALSE}
+fullList_brm <- brm(answerType_fullList ~ 1, 
+    data = df_clean_main_binary, 
+    family = "categorical",
+    iter = 3000
+    )
+summary(fullList_brm)
+```
+
+### Appendix plots
+
+For the Appendix, we plot the distribution of response categories for all models, with all response categories. Alternative and other_response categories are collapsed into "undefined" responses. 
+
+```{r}
+df_combined_annotated <- df_combined %>%
+  mutate(
+    category = ifelse(category == "alternative", "other_response", category),
+    answerType = factor(category, levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList', 'other_response'), 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive', 'undefined responses'))
+  ) 
+  
+df_combined_summary <- df_combined_annotated %>%
+  group_by(model, prompt) %>% 
+  mutate(model_prompt_count = n()) %>%
+  group_by(model, prompt, answerType) %>% 
+  reframe(answerType_count = n(), 
+            answerType_proportion = answerType_count / model_prompt_count
+            )  %>% unique() %>%
+  mutate(model = factor(model, levels = c("Humans", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst.")))
+
+# plot all LLM results with all types
+df_combined_summary %>% 
+  filter(prompt != "human") %>%
+  mutate(prompt = factor(prompt, levels = c("zero-shot", "one-shot Explanation", "one-shot QA", "one-shot CoT"), 
+                         labels = c("zero-shot\n(V)", "one-shot\nExplanation\n(I+II+IV+V)", "one-shot\nQA (I+III+IV+V)", "one-shot\nCoT (I-V)"))) %>%
+  ggplot(., aes(x = prompt, y = answerType_proportion, fill = answerType)) +
+  geom_col(color = "#575463", width = 0.9) + 
+  geom_col(data = df_combined_summary %>% filter(prompt == "human"), aes(x = prompt, y = answerType_proportion, fill = answerType), width = 0.9, color = "#575463") +
+    scale_fill_manual(values = cbp1) +
+  scale_y_continuous( breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)) +
+   theme(plot.title = element_text(hjust = 0.5),  legend.title = element_text(size=12), legend.text = element_text(size=12), axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 45, margin = margin(t = 10), size = 12)) +
+  ylab("") +
+  xlab("") +
+  facet_grid(.~model, scales = "free_x", space = "free_x") +
+  ggtitle("Do you have iced tea?")
+
+```
