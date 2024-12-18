@@ -1,8 +1,8 @@
 ---
-title: "Credit cards"
+title: "Case study 1"
 author: "PT"
 date: "2024-06-26"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
@@ -14,22 +14,16 @@ library(ggpattern)
 library(cspplot)
 ```
 
-## R Markdown
+# Case study 1
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+The following script is for processing and running statistical analyses for case study 1. The script uses a dataset of human responses that was manually annotated. Erroneous answers (e.g., false, given the context) were excluded from the data file and the analyses. Only main trials are analysed.
 
 ```{r}
-d <- read_csv('data/results_24_PragmaticQA-E3-creditCards-25-annotated.csv')
+d_clean <- read_csv('../data/human/case_study_1/e1_free_production_human_categorized.csv')
 ```
 
+Run some descriptive analyses:
 ```{r}
-# error rate: 0.1
-d %>% filter(category == "error") %>% nrow()
-d %>% nrow()
-d_clean <- d %>% filter(category != "error") %>% filter(trial_type == "main")
-#d_clean %>% write_csv("~/Documents/PhD/03_gpt3_QA/prior-pq/data/human/case_study_1/e1_free_production_human_categorized.csv")
 d_clean %>% count(condition, category)
 
 d_clean %>% group_by(condition) %>%
@@ -51,6 +45,9 @@ d_clean_exhaustive %>%
   tidyboot_mean(column = is_exhaustive)
 ```
 
+## Stats
+
+We run two Bayesian logistic regressions, analysing whether there is a credible difference in the rate of 1) exhaustive and 2) taciturn responses in the human data, depending on the condition. 
 ```{r}
 lm_exhaustive <- brm(is_exhaustive ~ condition + (1|submission_id),
                      data = d_clean_exhaustive,

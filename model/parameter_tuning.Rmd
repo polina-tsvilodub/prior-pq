@@ -34,13 +34,15 @@ scale_fill_discrete <- function(...) {
 ```{r get-data, echo=FALSE}
 # get data for case study 2
 
-urlfile="https://raw.githubusercontent.com/magpie-ea/magpie3-qa-overinfo-free-production/main/data%2Banalysis/data_PT/results_e1_human_full_anonymized_categorized_cleaned.csv"
-raw_empirical_responses_2 <- read_csv(url(urlfile))
+raw_empirical_responses_2 <- read_csv("../data/human/case_study_2/e2_free_production_human_categorized.csv") %>%
+  select(itemName, answer, response_option, option_category, category) %>%
+  mutate(answerType = factor(category, levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList', 'other_response',  'alternative'), 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive', 'undefined responses', 'alternative'))) %>%
+  mutate(prompt = "human", model = "Humans")
 scenarios_2 <- unique(raw_empirical_responses_2$itemName)
 
 # RSA preds over many parameter values
-urlfile = "https://media.githubusercontent.com/media/hawkrobe/QA_models/main/03-current-models-webppl/data/case_study_2_parameter_search.csv"
-model_preds_many_params_2 <- read_csv(url(urlfile))
+model_preds_many_params_2 <- read_csv("../data/priorpq/case_study_2/c2_parameter_search.csv")
 
 ########
 
@@ -54,22 +56,12 @@ urlfile = "https://media.githubusercontent.com/media/hawkrobe/QA_models/main/03-
 model_preds_many_params_3 <- read_csv(url(urlfile))
 
 answerOrder <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive', 'unclassified', 'other response')
+
+epsilon = 0.000000000001
 ```
 
 ```{r pick-params-2}
 empirical_2_summary <- raw_empirical_responses_2 %>%
-  filter(trial_type != "filler") %>%
-  dplyr::mutate(
-    answerType = dplyr::case_when(
-      category == "taciturn" ~ 'taciturn',
-      category == "competitor" ~ 'competitor',
-      category == "sameCategory" ~ 'same category',
-      category == "fullList" ~ 'exhaustive',
-      category == "otherCategory" ~ 'other category',
-      category == NA_character_ ~ 'other response',
-      .default = "other response"
-    ) %>% factor(levels = answerOrder)
-  ) %>% 
   filter(answerType != "other response") %>%
   rename(scenario = itemName) %>%
   group_by(scenario, answerType) %>%
@@ -81,16 +73,15 @@ empirical_2_summary <- raw_empirical_responses_2 %>%
 
 model_human_2 <- model_preds_many_params_2 %>%
   select(-relevanceBetaR0) %>%
+  rename("answerType" = "support") %>%
   dplyr::mutate(
     answerType = dplyr::case_when(
-      support == "no.---" ~ 'taciturn',
-      support == "no.competitor" ~ 'competitor',
-      support == "no.competitor+sameCat" ~ 'same category',
-      support == "no.sameCat" ~ 'same category',
-      support == "no.competitor+otherCat" ~ 'other category',
-      support == "no.otherCat" ~ 'other category',
-      support == "no.sameCat+otherCat" ~ 'other response',
-      support == "no.competitor+sameCat+otherCat" ~ 'exhaustive',
+      answerType == "taciturn" ~ 'taciturn',
+      answerType == "competitor" ~ 'competitor',
+      answerType == "sameCat" ~ 'same category',
+      answerType == "exhaustive" ~ 'exhaustive',
+      answerType == "otherCat" ~ 'other category',
+      answerType == NA_character_ ~ 'other response',
       .default = "other response"
     ) %>% factor(levels = answerOrder)
   ) %>%
@@ -106,7 +97,7 @@ model_human_2 <- model_preds_many_params_2 %>%
   complete(answerType, nesting(policyAlpha, questionerAlpha, R1Alpha, 
            relevanceBetaR1, costWeight, scenario)) %>%
   left_join(empirical_2_summary, by = c("scenario", "answerType")) %>%
-  replace_na(list(human_prop = 0, prob = 0))
+  replace_na(list(human_prop = epsilon, prob = epsilon))
 
 JSD_2 <- model_human_2 %>%
   group_by(policyAlpha, questionerAlpha, R1Alpha,  
@@ -125,7 +116,7 @@ params_2 <- JSD_2 %>%
   ungroup() %>%
   slice_min(n = 1, order_by = JSD)
 
-write_csv(params_2, here("03-current-models-webppl/data/params_case_study_2.csv"))
+write_csv(params_2, here("data/priorpq/case_study_2/params_case_study_2.csv"))
 ```
 
 ```{r pick-params-3}
@@ -207,7 +198,7 @@ params_3_overall <- JSD_3 %>%
   ungroup() %>%
   slice_min(n = 1, order_by = JSD)
 
-write_csv(params_3_overall, here("03-current-models-webppl/data/params_case_study_3.csv"))
+write_csv(params_3_overall, here("data/priorpq/case_study_3/params_case_study_3.csv"))
 ```
 
 ```{r overall-2, eval = FALSE}
