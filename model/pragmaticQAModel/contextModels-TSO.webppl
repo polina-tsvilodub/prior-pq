@@ -16,7 +16,7 @@ var tsoContext = {
   questions: [
     {type: 'single-item', queried: ['target'], text: 'Target?'},
     {type: 'single-item', queried: ['competitor'], text: 'Competitor?'},
-    {type: 'single-item', queried: ['sameCat'], text: 'Same Cagegory?'},
+    {type: 'single-item', queried: ['sameCat'], text: 'Same Category?'},
     {type: 'single-item', queried: ['otherCat'], text: 'Other Category?'},
     {type: 'wh', queried: tsoAtoms, text: 'Which elements?'},
   ],
