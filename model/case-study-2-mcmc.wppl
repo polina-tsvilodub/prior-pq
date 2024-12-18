@@ -1,0 +1,111 @@
+Infer({method: 'MCMC', samples: 10000, model: function() {
+    var params =
+	{
+            policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.1}),
+            questionerAlpha : uniformDrift({a: 0, b: 10, width: 0.1}),
+            R1Alpha         : uniformDrift({a: 0, b: 10, width: 0.1}),
+            relevanceBetaR1 : uniformDrift({a: 0, b: 1, width: 0.1}),
+            costWeight      : uniformDrift({a: 0, b: 2, width: 0.1}),	
+	    noOption       : uniformDrift({a: -10, b: 0, width: 1}),
+            questionCost    : 0,
+	}
+
+    var contextTarget = extend(
+	tsoContext,
+	{ name: "target",
+	  decisionProblem : function(w, a) {
+              return _.includes(w, a) ?
+		  (a == 'target' ? 9.618 :
+		   a == 'competitor' ? 5.693 :
+		   a == 'sameCat' ? 3.611 : 2.369) :
+		  params.noOption;
+	  }}
+    )
+
+    var contextCompetitor = extend(
+	tsoContext,
+	{name: "competitor",
+	 decisionProblem : function(w, a) {
+             return _.includes(w, a) ?
+		 (a == 'target' ? 5.555583 :
+		  a == 'competitor' ? 9.521075 :
+		  a == 'sameCat' ? 3.814870 : 2.485163) :
+		 params.noOption;
+	 }}
+    )
+
+
+    var contextSameCat = extend(
+	tsoContext,
+	{name: 'sameCat',
+	 decisionProblem : function(w, a) {
+             return _.includes(w, a) ?
+		 (a == 'target' ? 4.008662 :
+		  a == 'competitor' ? 3.958796 :
+		  a == 'sameCat' ? 9.503768 : 2.615277) :
+		 params.noOption;
+	 }}
+    )
+
+    var contextOtherCat = extend(
+	tsoContext,
+	{name: 'otherCat',
+	 decisionProblem : function(w, a) {
+             return _.includes(w, a) ?
+		 (a == 'target' ? 2.408933 :
+		  a == 'competitor' ? 2.547491 :
+		  a == 'sameCat' ? 2.537159 : 9.564791) :
+		 params.noOption;
+	 }}
+    )
+
+    var identity = extend(
+	tsoContext,
+	{name: 'identity',
+	 decisionProblem : function(w, a) {
+             return _.includes(w, a) ?
+		 (a == 'target' ? 100 :
+		  a == 'competitor' ? -10 :
+		  a == 'sameCat' ? -10 : -10) :
+		 params.noOption;
+	 }}
+    )
+
+
+    var question = tsoContext.questions[0];
+
+    // R1 uncertain
+    var R1Prior = {
+	target: contextTarget,
+	competitor: contextCompetitor,
+	sameCat: contextSameCat,
+	otherCat: contextOtherCat,
+	identity: identity,
+	distribution: Categorical({vs: ["target", "competitor", "sameCat", "otherCat"]})
+    }
+
+    var R1Prediction = R1Averager(tsoContext, R1Prior, question, params)
+    var R1PredictionReduced = Infer({method: 'enumerate'}, function() {
+        var response = sample(R1Prediction);
+    	return response == 'no.---' ? 'taciturn' :
+	       response == 'no.competitor' ? 'competitor' :
+	       	response == 'no.sameCat' ? 'sameCat' :
+		response == 'no.otherCat' ? 'otherCat' :
+		response == 'no.competitor+sameCat' ? 'sameCat' :
+		response == 'no.competitor+otherCat' ? 'otherCat' :
+		response == 'no.sameCat+otherCat' ? 'otherCat' :
+		response == 'no.competitor+sameCat+otherCat' ? 'exhaustive' :
+		'other'
+    })
+    terminalViz(R1PredictionReduced)
+    var taciturnError = Gaussian({mu: 0.206, sigma: 1}).score(R1PredictionReduced.score('taciturn'))
+    var competitorError = Gaussian({mu: 0.512, sigma: 1}).score(R1PredictionReduced.score('competitor'))
+    var sameCatError = Gaussian({mu: 0.168, sigma: 1}).score(R1PredictionReduced.score('sameCat'))
+    var otherCatError = Gaussian({mu: 0.0136, sigma: 1}).score(R1PredictionReduced.score('otherCat'))
+    var exhaustiveError = Gaussian({mu: 0.101, sigma: 1}).score(R1PredictionReduced.score('exhaustive'))
+    var mse = taciturnError + competitorError + sameCatError + otherCatError + exhaustiveError
+    console.log(params)
+    console.log('error:', mse)
+    factor(mse)
+    return params
+}})
