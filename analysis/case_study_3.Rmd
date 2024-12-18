@@ -1,0 +1,183 @@
+---
+title: "Case study 3"
+author: "PT"
+date: "2024-12-17"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Case study 3
+
+Below, the analyses of the experimental data in case study 3 can be found.
+
+## Free production experiment
+
+Below, the analysis of the free production case study 3 data can be found. The vignettes presented pairs of different contexts. However, the list of alternatives was the same for both contexts. The hypothesis is that the suggested competitors will differ across contexts.
+
+The responses were manually classified into the following categories: 
+
+* competitor: responses mentioning the anticipated competitor only (vary across contexts, sometimes several options were categorized as competitors)
+* mostSimilar: response mentioning the alternative that can be considered most similar to the target _out of context_ (i.e., same for both contexts), alone or together with competitors
+* sameCategory: responses offering both competitor
+* otherCategory: responses offering the alternative from the different category (distractors; same in both contexts), alone or with any other alternative(s) 
+* fullList: responses where all alternatives were listed (also in two sentences, where one offered the competitor only etc)
+* taciturn: responses not offering any alternative options or further alternative solutions
+* alternative: responses offering further steps towards solving the question but not fitting the categories above, e.g., responses using basic level categories (e.g., "dogs" instead of offering specific alternatives). Only applicable to human and LLM responses.
+* other_responses: remaining unclassifiable responses. Only applicable to human and LLM responses.
+
+In the experiment, each subject saw *four main trials* and *one attention checking trial*. Participants failing attention checks were excluded from analysis. 
+
+This script analyses manually annotated data, post exclusion of human participants who failed the attention checks.
+Alternative and other_response answers are excluded from main analyses.
+
+```{r, include=FALSE, warning=FALSE, message=FALSE}
+answerOrder <- c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'mostSimilar', 'fullList', 'other_response',  'alternative')
+answerLabels <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive', 'undefined responses', 'alternative')
+optionOrder <- c("competitor_c1", "competitor_c2", "mostSimilar", "otherCategory")
+cbp1 <- c("#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#999999")
+
+df_human <- read_csv("../data/human/case_study_3/e3_free_production_human_categorized.csv") %>%
+  select(itemName, settingName, answer, response_option, option_category, category, context_nr) %>%
+  mutate(category = case_when(category == 'competitor_c1' ~ 'competitor',
+                              category == 'competitor_c2' ~ 'competitor',
+                              TRUE ~ category)) %>%
+  mutate(answerType = factor(category, 
+                             levels = answerOrder, 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive', 'undefined responses', 'alternative'))) %>%
+  mutate(prompt = "human", model = "Humans")
+
+df_llms <- read_csv("../data/llms/case_study_3/e3_llms_results_annotated.csv") %>%
+  mutate(category = case_when(category == 'competitor_c1' ~ 'competitor',
+                              category == 'competitor_c2' ~ 'competitor',
+                              TRUE ~ category)) %>%
+  mutate(answerType = factor(category, levels = answerOrder, 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive', 'undefined responses', 'alternative'))) %>% 
+  rename(answer = predictions) %>%
+  mutate(model = case_when(model == "gpt-4-0613" ~ "GPT-4",
+                           model == "meta-llama/Meta-Llama-3-70B-Instruct" ~ "Llama-3-70B-Inst.",
+                           model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
+                           TRUE ~ model))
+
+## TODO: read RSA data here ##
+
+df_combined <- rbind(
+  df_human %>% mutate(model = "Humans", prompt = "human"),
+  df_llms %>% select(-global_category)
+) %>% filter(!is.na(answerType))
+```
+
+### Main analyses
+```{r}
+df_combined_exploded <- df_combined %>% filter(category != "alternative") %>%
+  filter(category != "other_response") %>%
+  # remove white spaces and split the annotations of mentioned option types
+  mutate(option_category = gsub(" ", "", option_category)) %>%
+  separate_rows(option_category, sep=",")
+
+df_combined_exploded_summary <- df_combined_exploded %>%
+  rowwise() %>%
+  filter(option_category %in% optionOrder) %>%
+  group_by(context_nr, model, prompt) %>%
+  mutate(context_count = n()) %>%
+  group_by(model, prompt, context_nr, option_category) %>%
+  summarise(mentioned_option_proportion = n() / context_count) %>%
+  unique() 
+  
+df_combined_exploded_summary %>%
+  filter((prompt == "human") | ((prompt %in% c("one-shot CoT", "zero-shot") ) & (model == "Mixtral-Inst.")  )) %>%
+  filter((option_category =="competitor_c1") | (option_category =="competitor_c2")) %>%
+  mutate(model_prompt = str_c(model, prompt, sep="\n"),
+         model_prompt = ifelse(model_prompt == "human\nhuman", "Humans", model_prompt),
+         `Mentioned option` = option_category) %>%
+  ggplot(., aes(x = context_nr, y = mentioned_option_proportion, fill = `Mentioned option`)) +
+  geom_col(position = position_dodge()) +
+  scale_fill_manual(values = cbp1) +
+  facet_grid(.~model_prompt) +
+  xlab("") +
+  ylab("") +
+  theme(axis.text.x = element_text(angle = 45, hjust =1))
+```
+
+Below, we calculate statistics on results reported in the main part of the paper, comparing the proportion of different competitor produced, depending on the context.
+
+```{r stats}
+comp1_trials_human <- df_combined_exploded %>% 
+  filter(prompt == "human") %>%
+  mutate(option_category_c1 = ifelse(option_category == "competitor_c1", 1, 0))
+
+comp2_trials_human <- df_combined_exploded %>% 
+  filter(prompt == "human") %>%
+  mutate(option_category_c2 = ifelse(option_category == "competitor_c2", 1, 0))
+
+lm_comp1_human <- brm(
+  option_category_c1 ~ context_nr,
+  data = comp1_trials_human,
+  family = "bernoulli",
+  iter = 3000
+)
+summary(lm_comp1_human)
+
+lm_comp2_human <- brm(
+  option_category_c2 ~ context_nr,
+  data = comp2_trials_human,
+  family = "bernoulli",
+  iter = 3000
+)
+summary(lm_comp2_human)
+```
+
+### Appendices
+
+Below we plot the proportions of mentioning all different options by context, for all models, for the appendix. 
+```{r}
+df_combined_exploded_summary %>%
+  mutate(model_prompt = str_c(model, prompt, sep="\n"),
+         model_prompt = ifelse(model_prompt == "human\nhuman", "Humans", model_prompt),
+         `Mentioned option` = option_category) %>%
+  ggplot(., aes(x = `Mentioned option`, y = mentioned_option_proportion, fill = prompt)) +
+  geom_col(position = position_dodge()) +
+  facet_wrap(context_nr~model, ncol=5) +
+  scale_fill_manual(values = cbp1) +
+  xlab("") +
+  ylab("") +
+  theme(axis.text.x = element_text(angle = 45, hjust =1))
+```
+
+Below, we plot a supplementary figure displaying proportions of different high-level response categories over different sets of mentioned alternatives, created similarly to case study 2.
+
+```{r}
+df_combined_annotated <- df_combined %>%
+  mutate(
+    category = ifelse(category == "alternative", "other_response", category),
+    answerType = factor(category, levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'mostSimilar', 'fullList', 'other_response'), 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive', 'undefined responses'))
+  )
+
+df_combined_summary <- df_combined_annotated %>%
+  group_by(model, prompt) %>%
+  mutate(model_prompt_counts = n()) %>%
+  group_by(model, prompt, answerType) %>% 
+  summarise(answerType_prop = n() / model_prompt_counts) %>% 
+  unique() %>%
+  mutate(model = factor(model, levels = c("Humans", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst.")))
+
+df_combined_summary %>%
+  filter(prompt != "human") %>%
+  mutate(prompt = factor(prompt, levels = c("zero-shot", "one-shot Explanation", "one-shot QA", "one-shot CoT"), 
+                         labels = c("zero-shot\n(V)", "one-shot\nExplanation\n(I+II+IV+V)", "one-shot\nQA (I+III+IV+V)", "one-shot\nCoT (I-V)"))) %>%
+  ggplot(., aes(x = prompt, y = answerType_prop, fill = answerType)) +
+  geom_col(color = "#575463", width = 0.9) + 
+  geom_col(data = df_combined_summary %>% filter(prompt == "human"), aes(x = prompt, y = answerType_prop, fill = answerType), width = 0.9, color = "#575463") +
+    scale_fill_manual(values = cbp1) +
+  scale_y_continuous( breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)) +
+   theme(plot.title = element_text(hjust = 0.5),  legend.title = element_text(size=12), legend.text = element_text(size=12), axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 45, margin = margin(t = 10), size = 12)) +
+  ylab("") +
+  xlab("") +
+  facet_grid(.~model, scales = "free_x", space = "free_x") +
+  ggtitle("Do you have a blanket?")
+```
+
