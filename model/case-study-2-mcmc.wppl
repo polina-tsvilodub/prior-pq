@@ -1,4 +1,4 @@
-Infer({method: 'MCMC', samples: 10000, model: function() {
+Infer({method: 'MCMC', burn: 100, samples: 10000, onlyMAP: true, model: function() {
     var params =
 	{
             policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.1}),
