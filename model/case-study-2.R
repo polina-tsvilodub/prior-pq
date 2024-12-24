@@ -33,8 +33,11 @@ urlfile="https://raw.githubusercontent.com/magpie-ea/magpie3-qa-overinfo-free-pr
 priors <- read_csv(url(urlfile))
 scenarios <- unique(priors$itemName)
 
-urlfile="https://raw.githubusercontent.com/magpie-ea/magpie3-qa-overinfo-free-production/main/data%2Banalysis/data/results_QA-overinfo-freeTyping-cogsci_full_anonymized_categorized.csv"
-empirical_responses <- read_csv(url(urlfile))
+empirical_responses <- read_csv("data/human/case_study_2/e2_free_production_human_categorized.csv") %>%
+  select(itemName, answer, response_option, option_category, category) %>%
+  mutate(answerType = factor(category, levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList', 'other_response',  'alternative'), 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive', 'undefined responses', 'alternative'))) %>%
+  mutate(prompt = "human", model = "Humans")
 
 urlfile="https://raw.githubusercontent.com/magpie-ea/magpie3-qa-overinfo-free-production/main/data%2Banalysis/data/PragmaticQA-E1-priorElicitation-sliderRating-full_450_anonymized.csv"
 full_matrix_data <- read_csv(url(urlfile))
@@ -54,13 +57,13 @@ full_matrix %>%
 #################################################
 
 
-policyAlpha = c(1,3,5,7,9)
-questionerAlpha = c(1,3,5,7,9)
-R1Alpha = c(1,3,5,7,9)
+policyAlpha = c(1,5,9)
+questionerAlpha = c(1,5,9)
+R1Alpha = c(1,5,9)
 relevanceBetaR0 = c(0)
-relevanceBetaR1 = c(0.1, 0.3, 0.5, 0.7, 0.9)
-costWeight = c(0.1, 0.3, 0.5, 0.7, 0.9)
-n_sample <- c(1,2,3,4,5)
+relevanceBetaR1 = c(0.1, 0.5, 0.9)
+costWeight = c(0.1, 0.5, 0.9)
+n_sample <- c(1)
 questionCost <- c(0)
 
 param_space <- expand_grid(policyAlpha, questionerAlpha, R1Alpha, relevanceBetaR0, relevanceBetaR1, costWeight, questionCost, scenarios, n_sample)
@@ -84,12 +87,12 @@ run_model_tso <- function (params, utils) {
 
 priorSampleParams <- function() {
   params <- tibble(
-    'policyAlpha'      = runif(1,min = 3, max = 3), # searched 0-10
-    'questionerAlpha'  = runif(1,min = 9, max = 9), # searched 0-10
-    'R1Alpha'          = runif(1,min = 7, max = 7), # searched 0-10
+    'policyAlpha'      = runif(1,min = 5, max = 5), # searched 0-10
+    'questionerAlpha'  = runif(1,min = 5, max = 5), # searched 0-10
+    'R1Alpha'          = runif(1,min = 5, max = 5), # searched 0-10
     'relevanceBetaR0'  = runif(1,min = 0, max = 0), # fixed at 0
-    'relevanceBetaR1'  = runif(1,min = 0.1, max = 0.1), # searched 0-1
-    'costWeight'       = runif(1,min = 0.9, max = 0.9), # searched 0-1
+    'relevanceBetaR1'  = runif(1,min = 0.95, max = 0.95), # searched 0-1
+    'costWeight'       = runif(1,min = 0.5, max = 0.5), # searched 0-1
     'questionCost'     = runif(1,min = 0, max = 0) # fixed at 0
   )
   return(params)
@@ -98,9 +101,12 @@ priorSampleParams <- function() {
 empiricalPrior <- function(scenario) {
   these_priors <- full_matrix %>% 
     mutate(targetOption = fct_relevel(targetOption, 'itemQuestion', 'competitor', 'sameCategory', 'otherCategory')) %>%
-    group_by(targetOption) %>%
     filter(itemName == scenario) %>%
-    sample_n(1)
+    group_by(targetOption) %>%
+    summarise(itemQuestion = log(mean(itemQuestion)),
+              competitor = log(mean(competitor)),
+              sameCategory = log(mean(sameCategory)),
+              otherCategory = log(mean(otherCategory)))
     
   utils <- tibble(
     'utilTarget'       = these_priors$itemQuestion,
@@ -124,6 +130,7 @@ param_search = FALSE
 if (param_search == TRUE) {
   n_samples = nrow(param_space)
 }
+
 priorPred <- furrr::future_map_dfr(1:n_samples, function(i) {
   message('run ', i)
   if (param_search == TRUE) {
@@ -143,7 +150,8 @@ priorPred <- furrr::future_map_dfr(1:n_samples, function(i) {
 
 
 if (param_search == TRUE) {
-  write_csv(priorPred, here('data/case_study_2_parameter_search.csv'))
+  write_csv(priorPred, here('data/priorpq/case_study_2/c2_parameter_search.csv'))
 } else {
-  write_csv(priorPred, here('data/case_study_2_RSA_preds.csv'))
+  write_csv(priorPred, here('data/priorpq/case_study_2/c2_model_preds.csv'))
 }
+
