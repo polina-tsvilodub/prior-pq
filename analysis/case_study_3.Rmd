@@ -191,3 +191,45 @@ df_combined_summary %>%
 #ggsave("figs/cs3_response-props_appendix.png", width=15, height=7)
 ```
 
+Below, we run a multinomial regression model on the high-level response categories, similar to case study 2. We hypothesize that competitor responses will be preferred over otherCategory, exhaustive responses, and taciturn responses. We further explore whether responses mentioning subsets of options (competitor, sameCategory, mostSimilar) are preferred over taciturn and exhaustive responses.
+
+```{r, warning=FALSE, message=FALSE, error=FALSE}
+df_human_main_stats <- df_combined %>% 
+  filter(category != "alternative") %>%
+  filter(category != "other_response") %>% 
+  filter(prompt == "human") %>% 
+  mutate(answerType = factor(category, levels = c('competitor', 'taciturn', 'mostSimilar', 'sameCategory', 'otherCategory', 'fullList')))
+
+contrasts(df_human_main_stats$answerType)
+
+# multinomial regression with intercept only
+multinom_brm <- brm(answerType ~ 1, 
+    data = df_human_main_stats, 
+    family = "categorical",
+    iter = 3000
+    )
+summary(multinom_brm)
+```
+
+```{r}
+multinom_posteriors <- multinom_brm %>% spread_draws(b_musameCategory_Intercept, b_muotherCategory_Intercept, b_mufullList_Intercept, b_mutaciturn_Intercept, b_mumostSimilar_Intercept) %>%
+  mutate(
+    sameCategory_vs_fullList = b_musameCategory_Intercept - b_mufullList_Intercept,
+    sameCategory_vs_otherCategory = b_musameCategory_Intercept - b_muotherCategory_Intercept,
+    sameCategory_vs_taciturn = b_musameCategory_Intercept - b_mutaciturn_Intercept,
+    sameCategory_vs_mostSimilar = b_musameCategory_Intercept - b_mumostSimilar_Intercept
+  )
+
+multinom_posteriors %>% select(sameCategory_vs_fullList, sameCategory_vs_otherCategory, sameCategory_vs_taciturn, sameCategory_vs_mostSimilar) %>%
+  gather(key, val) %>%
+  group_by(key) %>%
+  summarise(
+    '|95%' = quantile(val, probs = c(0.025, 0.975))[[1]],
+    'mean'  = mean(val),
+    '95%|' = quantile(val, probs = c(0.025, 0.975))[[2]],
+    prob_gt_0 = mean(val > 0)*100,
+    prob_lt_0 = mean(val < 0)*100
+  ) -> multinom_posteriors_summary
+
+multinom_posteriors_summary
+```
