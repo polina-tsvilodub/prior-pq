@@ -175,3 +175,11 @@ expts_llms_human %>%
 
 #ggsave("figs/jsd_e1.pdf", width=10, height=5)
 ```
+
+Finally, we calculate the average JSD to identify which LLM fits closest to human data across prompting conditions.
+```{r}
+expts_llms_human %>% 
+  group_by(experiment, model) %>%
+  summarise(mean_jsd = mean(jsd)) %>%
+  arrange(mean_jsd)
+```

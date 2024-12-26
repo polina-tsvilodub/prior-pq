@@ -1,0 +1,177 @@
+---
+title: "Case study 2: Prior elicitation of utilities"
+author: "PT"
+date: "2022-12-04"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, include = FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(tidyboot)
+library(forcats)
+library("gridExtra")
+library(cspplot)
+```
+
+```{r, include=FALSE}
+# these options help Stan run faster
+options(mc.cores = parallel::detectCores())
+```
+
+## Experiment
+
+This experiment implements a full scale study for eliciting human data about utilities of different alternatives, given a target object. The experiment can be viewed [here](https://magpie3-qa-overinformative-priors.netlify.app/).
+
+Each participant saw one trial for four vignettes sampled at random from the full set of 30 vignettes used in E1 of the CogSci 2023 experiment; additionally they saw one attention check, resulting in five trials / subject. The target is N=450, for expected 15 ratings per cell of each vignette (for 16 cell / vignette; 30 x 16 x 15 / 16 = 450).
+
+## Analysis
+
+We (descriptively) analyse the ratings of different options against each other. We predict that, given the target, participants would rate the alternatives in the following order (from highest to lowest): competitor, same category, other category alternatives.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
+answerOrder <- c('target', 'competitor', 'sameCategory', 'otherCategory')
+
+df <- read_csv("../../data/human/case_study_2/e2_prior_elicitation_human.csv")
+cat("Number of recruited subjects: ", df %>% pull(submission_id) %>% unique() %>% length())
+```
+
+```{r, echo=FALSE, include = FALSE, message=FALSE, warning=FALSE}
+# get main clean data and center responses
+df_clean_main <- df %>% 
+  filter(trial_type == "main") 
+cat("Numbrer of main trial data points that are used for analysis: ", nrow(df_clean_main) )
+
+
+df_clean_main_long <- df_clean_main %>%
+  select(itemName, trialNr, submission_id, targetOption, itemQuestion, competitor, sameCategory, otherCategory) %>%
+   pivot_longer(cols = c(itemQuestion, competitor, sameCategory, otherCategory), names_to = 'answerType', values_to = "response") %>%
+  mutate(
+    categorized_response = case_when(
+      targetOption == answerType ~ "target",
+      targetOption == "itemQuestion" ~ answerType,
+      (targetOption == "competitor") & (answerType == "itemQuestion") ~ "competitor",
+      (targetOption == "competitor") & (answerType == "sameCategory") ~ "sameCategory",
+      (targetOption == "competitor") & (answerType == "otherCategory") ~ "otherCategory",
+      (targetOption == "sameCategory") & (answerType == "itemQuestion") ~ "sameCategory",
+      (targetOption == "sameCategory") & (answerType == "competitor") ~ "sameCategory",
+      (targetOption == "sameCategory") & (answerType == "otherCategory") ~ "otherCategory",
+      targetOption == "otherCategory" ~ "otherCategory",
+      TRUE ~ answerType
+    )
+  ) 
+```
+
+One subject is excluded because they provided all ratings within 5 points. 
+
+```{r, echo=FALSE}
+df_bad_subj <- df_clean_main_long %>% group_by(submission_id) %>%
+  mutate(bad_subj = (max(response) - min(response)) < 5)
+df_bad_subj %>% filter(bad_subj == TRUE)
+cat("\nnumber of subjects who provided the same responses within 5 points on all main trials:",  df_bad_subj %>% filter(bad_subj == TRUE) %>% pull(submission_id) %>% unique() %>% length())
+bad_subj_ids <- df_bad_subj %>% filter(bad_subj == TRUE) %>% pull(submission_id) %>% unique()
+
+df_clean_main <- df_clean_main %>% filter(!(submission_id %in% bad_subj_ids))
+df_clean_main_long <- df_clean_main_long %>% filter(!(submission_id %in% bad_subj_ids))
+
+```
+
+In the dataset, "targetOption" refers to the category of the item that is mentioned as the requested target in the context ("Suppose someone wants to have X", where X is the option). The variable "answerType" refers to the item category of the received option for a given rating ("instead they get Y"). Whenever target option and answer type match, the rating is the one for the case when the received option is the actual target. This condition was included as a sanity check. 
+Below, the counts of different option combinations for each vignette are presented. 
+
+```{r, echo=FALSE}
+cat("\nNumber of analysed vignette trials: ", nrow(df_clean_main))
+# expected number of combinations: 30 x 4 = 120
+cat("\nNumber of vignettes X rated requested options (expected 120): ", nrow(df_clean_main %>% count(itemName, targetOption) ))
+# expected number of combinations: 30 x 4 x 4 = 480
+cat("\nNumber of vignettes X rated requested options X rated received options (expected 480): ", nrow(df_clean_main_long %>%  count(itemName, targetOption, answerType) ))
+# we want ~15 responses per cell
+cat("\nAverage number of rating per measurements per vignette: ", df_clean_main_long %>%  count(itemName, targetOption, answerType) %>% pull(n) %>% mean() )
+```
+
+Explore target ratings in order to check if there are any unexpected results. It seems that for all vignettes the participants behaved as expected (mean rating when requested target = received target is > 90).
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+df_clean_main_long %>% filter(categorized_response == "target") %>% group_by(itemName) %>%
+  summarize(mean_rating=mean(response)) %>% arrange(mean_rating)
+
+```
+
+## Means
+
+Below, means of the ratings by-target option (requested) by-answer type (received) are computed. We ellicited the full space of targets X alternatives (i.e., each of the four options was treated as the target), but we only report the means for conditions where the target object was presented as the target in the paper (i.e., targetOption = "target").
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+df_clean_main_long_summary <- df_clean_main_long %>% 
+  mutate(targetOption = ifelse(targetOption == "itemQuestion", "target", targetOption),
+         answerType = ifelse(answerType == "itemQuestion", "target", answerType),
+         targetOption = factor(targetOption, levels = answerOrder),
+         answerType  = factor(answerType, levels = answerOrder)) %>%
+  group_by(targetOption, answerType) %>%
+  tidyboot_mean(column = response) 
+
+df_clean_main_long_summary
+
+df_clean_main_long_byItem_summary <- df_clean_main_long %>% 
+  group_by(itemName, targetOption, answerType) %>%
+  summarize(mean_response = mean(response)) #tidyboot_mean(column = "response")
+```
+
+## Plots
+
+For exploration, we plot each participant's responses in each trial connecting them by lines, to confirm that the aggregate ordering preferences were borne out in the single trials. Additionally, we plot average ratings in each conditions.
+
+```{r, echo=FALSE}
+num_subj <- df_clean_main_long %>% pull(submission_id) %>% unique() %>% length()
+df_clean_main_long <- df_clean_main_long %>% 
+  mutate(categorized_response = factor(categorized_response, levels = answerOrder),
+         by_trial_nr = rep(1:(num_subj*4), each = 4),
+         by_trial_nr = factor(by_trial_nr)
+         ) 
+```
+
+Below, the ratings are plotted by-target option, collapsing across vignettes.
+```{r, fig.height = 7, fig.width=8, echo=FALSE}
+df_clean_main_long_plot <- df_clean_main_long %>%
+  mutate(targetOption = ifelse(targetOption == "itemQuestion", "target", targetOption),
+         answerType = ifelse(answerType == "itemQuestion", "target", answerType),
+         targetOption = factor(targetOption, levels = answerOrder),
+         answerType  = factor(answerType, levels = answerOrder))
+
+df_clean_main_long_plot %>%
+  ggplot(., aes(x = answerType, y = response, fill = answerType, color = answerType)) +
+  geom_point(alpha = 0.7) +
+  geom_point(data = df_clean_main_long_summary, aes(x = answerType, y = mean), size = 4) + 
+  geom_line(data = df_clean_main_long_plot, inherit.aes=F, aes(x = answerType, y = response, group = by_trial_nr), alpha  = 0.4) +
+  facet_wrap(targetOption~., ncol = 2) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(strip.text.x = element_text(size = 10)) +
+  theme(panel.spacing = unit(3, "lines")) +
+  theme(legend.position="none") +
+  ylab("Rating of alternative") +
+  ylim(0, 100) +
+  xlab("Category of alternative")
+```
+
+
+```{r}
+df_clean_main_long_summary_plot <- df_clean_main_long_plot %>% 
+  group_by(answerType) %>%
+  tidyboot_mean(column = response)
+
+df_clean_main_long_summary %>%
+  ggplot(., 
+         aes(x = answerType, y = mean, ymin = ci_lower, ymax = ci_upper, fill = answerType)
+         ) +
+  geom_col() +
+  geom_errorbar(width = 0.2) +
+  facet_wrap(targetOption~.) +
+  theme(legend.position = "none") +
+  xlab("rated option") +
+  ylab("rating")
+```
+
+
