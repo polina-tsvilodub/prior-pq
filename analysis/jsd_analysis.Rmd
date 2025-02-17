@@ -1,0 +1,185 @@
+---
+title: "JSD analysis"
+author: "PT"
+date: "2024-06-29"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(tidyboot)
+library(brms)
+library(tidybayes)
+library(ggpattern)
+library(philentropy)
+```
+
+
+# Introduction
+
+We calculate the Jensen-Shannon divergence as a measure of closeness of model predictions to human data. The divergences are calculated between proportions of answer types excluding the other_response and alternative categories.
+
+```{r, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+
+## case study 2 ##
+df_human <- read_csv("../data/human/case_study_2/e2_free_production_human_categorized.csv") %>%
+  select(itemName, answer, response_option, option_category, category) %>%
+  filter((category != "other_response") & (category != "alternative")) %>%
+  mutate(answerType = factor(category, 
+                             levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList'), 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive'))) %>%
+  mutate(prompt = "human", model = "Humans")
+
+df_llms <- read_csv("../data/llms/case_study_2/e2_llms_results_annotated.csv") %>% 
+  filter((category != "other_response") & (category != "alternative")) %>%
+  mutate(answerType = factor(category, 
+                             levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList'), 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive'))) %>% 
+  rename(answer = predictions) %>%
+  mutate(model = case_when(model == "gpt-4-0613" ~ "GPT-4",
+                           model == "meta-llama/Meta-Llama-3-70B-Instruct" ~ "Llama-3-70B-Inst.",
+                           model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
+                           TRUE ~ model))
+
+## TODO: read RSA data here 
+
+df_cs2_combined <- rbind(
+  df_human,
+  df_llms
+)
+
+## case study 3 ##
+df_human_cs3 <- read_csv("../data/human/case_study_3/e3_free_production_human_categorized.csv") %>%
+  select(itemName, settingName, answer, response_option, option_category, category, context_nr) %>%
+  filter((category != "other_response") & (category != "alternative")) %>%
+  mutate(category = case_when(category == 'competitor_c1' ~ 'competitor',
+                              category == 'competitor_c2' ~ 'competitor',
+                              TRUE ~ category)) %>%
+  mutate(answerType = factor(category, 
+                             levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'mostSimilar', 'fullList'), 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive'))) %>%
+  mutate(prompt = "human", model = "Humans")
+
+df_llms_cs3 <- read_csv("../data/llms/case_study_3/e3_llms_results_annotated.csv") %>%
+  filter((category != "other_response") & (category != "alternative")) %>%
+  mutate(category = case_when(category == 'competitor_c1' ~ 'competitor',
+                              category == 'competitor_c2' ~ 'competitor',
+                              TRUE ~ category)) %>%
+  mutate(answerType = factor(category, 
+                             levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'mostSimilar', 'fullList'), 
+                             labels = c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive'))) %>% 
+  rename(answer = predictions) %>%
+  mutate(model = case_when(model == "gpt-4-0613" ~ "GPT-4",
+                           model == "meta-llama/Meta-Llama-3-70B-Instruct" ~ "Llama-3-70B-Inst.",
+                           model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
+                           TRUE ~ model))
+
+## TODO: read RSA data here 
+
+df_cs3_combined <- rbind(
+  df_human_cs3 %>% mutate(model = "Humans", prompt = "human"),
+  df_llms_cs3 %>% select(-global_category)
+)
+
+```
+
+## Case study 2
+
+We calculate the JSD between the proportions of different response categories in human data and data of all models for case study 2.
+
+```{r}
+cs2_models_summary <- df_cs2_combined %>% 
+  filter(prompt != "human") %>%
+  group_by(model, prompt) %>%
+  mutate(model_count = n()) %>%
+  ungroup() %>%
+  group_by(model, prompt, answerType) %>%
+  mutate(prop = n() / model_count) %>% 
+  select(model, answerType, prompt, prop) %>%
+  unique() %>% 
+  ungroup() %>%
+  mutate(model_prompt = str_c(prompt, model, sep="_")) %>%
+  select(-model, -prompt) %>%
+  pivot_wider(names_from = model_prompt, values_from = prop, values_fill = 0.000001) %>%
+  arrange(answerType)
+
+cs2_humans_summary <- df_cs2_combined %>%
+  filter(prompt == "human") %>%
+  mutate(total_count = n()) %>%
+  group_by(answerType) %>%
+  mutate(`prop` = n() / total_count) %>% select(answerType, prop) %>% 
+  unique() %>%
+  arrange(answerType)
+
+jsd_cs2 <- map_dfc(cs2_models_summary %>% select(-answerType), 
+                   ~ philentropy::JSD(rbind(.x, cs2_humans_summary$prop)))
+```
+
+## Case study 3
+We calculate the JSD between the proportions of different response categories in human data and data of all models for case study 3. We use the high-level response categories, not the mentioning proportions of the single options, since they are non-exclusive.
+
+```{r}
+cs3_models_summary <- df_cs3_combined %>% 
+  filter(prompt != "human") %>%
+  filter(!is.na(answerType)) %>%
+  group_by(model, prompt) %>%
+  mutate(model_count = n()) %>%
+  ungroup() %>%
+  group_by(model, prompt, answerType) %>%
+  mutate(prop = n() / model_count) %>% 
+  select(model, answerType, prompt, prop) %>%
+  unique() %>% 
+  ungroup() %>%
+  mutate(model_prompt = str_c(prompt, model, sep="_")) %>%
+  select(-model, -prompt) %>%
+  pivot_wider(names_from = model_prompt, values_from = prop, values_fill = 0.000001) %>%
+  arrange(answerType)
+
+cs3_humans_summary <- df_cs3_combined %>%
+  filter(prompt == "human") %>%
+  mutate(total_count = n()) %>%
+  group_by(answerType) %>%
+  mutate(`prop` = n() / total_count) %>% select(answerType, prop) %>% 
+  unique() %>%
+  arrange(answerType)
+
+jsd_cs3 <- map_dfc(cs3_models_summary %>% select(-answerType), 
+                   ~ philentropy::JSD(rbind(.x, cs3_humans_summary$prop)))
+```
+
+Below, we plot the JSDs for both experiments.
+
+```{r}
+expts_llms_human <- rbind(
+  jsd_cs2 %>% pivot_longer(cols = colnames(.), names_to="prompt_model", values_to = "jsd") %>% rowwise() %>%
+  mutate(prompt = str_split(prompt_model, "_")[[1]][1], model = str_split(prompt_model, "_")[[1]][2]) %>%
+  ungroup() %>% mutate(experiment = "Case Study 2"),
+  jsd_cs3 %>% pivot_longer(cols = colnames(.), names_to="prompt_model", values_to = "jsd") %>% rowwise() %>%
+  mutate(prompt = str_split(prompt_model, "_")[[1]][1], model = str_split(prompt_model, "_")[[1]][2]) %>%
+  ungroup() %>%mutate(experiment = "Case Study 3")
+)
+```
+
+```{r}
+cbp1 <- c("#E69F00", "#56B4E9", "#009E73",
+          "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#999999")
+
+expts_llms_human %>% 
+  ggplot(., aes(x=prompt, y = jsd, color = model)) +
+  geom_point(size =3) +
+  geom_line(aes(group=model))+
+  scale_color_manual(values = cbp1) +
+  facet_wrap(.~experiment) +
+  ylab("JSD") +
+  theme(axis.text.x = element_text(angle = 25, hjust = 1))
+
+#ggsave("figs/jsd_e1.pdf", width=10, height=5)
+```
+
+Finally, we calculate the average JSD to identify which LLM fits closest to human data across prompting conditions.
+```{r}
+expts_llms_human %>% 
+  group_by(experiment, model) %>%
+  summarise(mean_jsd = mean(jsd)) %>%
+  arrange(mean_jsd)
+```

@@ -75,7 +75,7 @@ Below, plots are created. We plot the proportions of each response category for 
 
 ### Main analyses
 ```{r, echo=FALSE, fig.height=6, fig.width=8}
-# human response 
+# human responses
 df_human_main <- df_human %>%
   filter((answerType != "alternative") & (answerType != "undefined responses"))
 df_llms_main <- df_llms %>% 
@@ -88,7 +88,8 @@ df_human_main_summary <- df_human_main  %>%
             ) %>% 
   mutate(model = "Humans",
          model = factor(model, levels = c("Humans", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst.")))
-  
+
+# llm responses
 df_llms_main_summary <- df_llms_main  %>%
   group_by(model, prompt) %>% 
   mutate(model_prompt_count = n()) %>%
@@ -96,6 +97,8 @@ df_llms_main_summary <- df_llms_main  %>%
   reframe(answerType_count = n(), 
             answerType_proportion = answerType_count / model_prompt_count
             )  %>% unique()
+
+# TODO: add RSA responses
 ```
 
 ```{r}
@@ -133,7 +136,7 @@ Check if the proportions of other response categories are credibly different fro
 
 ```{r, warning=FALSE, message=FALSE, error=FALSE}
 df_human_main_stats <- df_human_main %>% 
-  mutate(answerType = factor(category, levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList')))
+  mutate(answerType = factor(category, levels = c('competitor', 'taciturn', 'sameCategory', 'otherCategory', 'fullList')))
 
 contrasts(df_human_main_stats$answerType)
 
@@ -171,19 +174,19 @@ multinom_posteriors_summary
 Additionally, we fit a model regressing the response type against an intercept, treating all response types as one vs taciturn responses, in order to check that generally, participants are less likely to produce taciturn responses than anything else. The same analysis is conducted for full list vs everything else. 
 
 ```{r, warning=FALSE, message=FALSE, error=FALSE}
-df_clean_main_binary <- df_clean_main %>% mutate(
+df_human_main_binary <- df_human_main_stats %>% mutate(
   answerType_taciturn = ifelse(answerType == "taciturn", "taciturn", "all"),
   answerType_taciturn = factor(answerType_taciturn),
   answerType_fullList = ifelse(answerType == "fullList", "fullList", "all"),
   answerType_fullList = factor(answerType_fullList)
 )
-contrasts(df_clean_main_binary$answerType_taciturn)
-contrasts(df_clean_main_binary$answerType_fullList)
+contrasts(df_human_main_binary$answerType_taciturn)
+contrasts(df_human_main_binary$answerType_fullList)
 
 # multinomial regression with intercept only
 taciturn_brm <- brm(answerType_taciturn ~ 1, 
-    data = df_clean_main_binary, 
-    family = "categorical",
+    data = df_human_main_binary, 
+    family = "bernoulli",
     iter = 3000
     )
 summary(taciturn_brm)
@@ -191,8 +194,8 @@ summary(taciturn_brm)
 
 ```{r, warning=FALSE, message=FALSE, error=FALSE}
 fullList_brm <- brm(answerType_fullList ~ 1, 
-    data = df_clean_main_binary, 
-    family = "categorical",
+    data = df_human_main_binary, 
+    family = "bernoulli",
     iter = 3000
     )
 summary(fullList_brm)
@@ -226,13 +229,23 @@ df_combined_summary %>%
                          labels = c("zero-shot\n(V)", "one-shot\nExplanation\n(I+II+IV+V)", "one-shot\nQA (I+III+IV+V)", "one-shot\nCoT (I-V)"))) %>%
   ggplot(., aes(x = prompt, y = answerType_proportion, fill = answerType)) +
   geom_col(color = "#575463", width = 0.9) + 
-  geom_col(data = df_combined_summary %>% filter(prompt == "human"), aes(x = prompt, y = answerType_proportion, fill = answerType), width = 0.9, color = "#575463") +
-    scale_fill_manual(values = cbp1) +
+  geom_col(
+    data = df_combined_summary %>% filter(prompt == "human"), 
+    aes(x = prompt, y = answerType_proportion, fill = answerType), 
+    width = 0.9, color = "#575463") +
+  scale_fill_manual(values = cbp1) +
   scale_y_continuous( breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)) +
-   theme(plot.title = element_text(hjust = 0.5),  legend.title = element_text(size=12), legend.text = element_text(size=12), axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 45, margin = margin(t = 10), size = 12)) +
+  
+  theme(plot.title = element_text(hjust = 0.5),  
+        legend.title = element_text(size=12), 
+        legend.text = element_text(size=12), 
+        axis.ticks.x = element_blank(), 
+        axis.text.x = element_text(angle = 45, margin = margin(t = 10), size = 12)) +
+  guides(fill = guide_legend(nrow = 1)) +
   ylab("") +
   xlab("") +
   facet_grid(.~model, scales = "free_x", space = "free_x") +
   ggtitle("Do you have iced tea?")
 
+#ggsave("figs/cs2_response-props_apprndix.png", width=15, height=7)
 ```

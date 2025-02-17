@@ -102,7 +102,7 @@ df_combined_exploded_summary %>%
   theme(axis.text.x = element_text(angle = 45, hjust =1))
 ```
 
-Below, we calculate statistics on results reported in the main part of the paper, comparing the proportion of different competitor produced, depending on the context.
+Below, we calculate statistics on results reported in the main part of the paper, comparing the proportion of different competitors over other alternatives mentioned in the responses, depending on the context.
 
 ```{r stats}
 comp1_trials_human <- df_combined_exploded %>% 
@@ -135,16 +135,23 @@ summary(lm_comp2_human)
 Below we plot the proportions of mentioning all different options by context, for all models, for the appendix. 
 ```{r}
 df_combined_exploded_summary %>%
-  mutate(model_prompt = str_c(model, prompt, sep="\n"),
-         model_prompt = ifelse(model_prompt == "human\nhuman", "Humans", model_prompt),
+  mutate(
+    prompt = ifelse(prompt == 'human', 'zero-shot', prompt),
+    model_prompt = str_c(model, prompt, sep="\n"),
+    model_prompt = ifelse(model_prompt == "human\nhuman", "Humans", model_prompt),
          `Mentioned option` = option_category) %>%
+  mutate(model = factor(model, 
+                        levels = c("Humans", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst."))
+         ) %>%
   ggplot(., aes(x = `Mentioned option`, y = mentioned_option_proportion, fill = prompt)) +
   geom_col(position = position_dodge()) +
-  facet_wrap(context_nr~model, ncol=5) +
+  facet_grid(rows = vars(context_nr), cols = vars(model)) +
   scale_fill_manual(values = cbp1) +
   xlab("") +
   ylab("") +
-  theme(axis.text.x = element_text(angle = 45, hjust =1))
+  theme(axis.text.x = element_text(angle = 45, hjust =1), strip.text.y = element_text(angle = 270))
+
+ggsave("figs/cs3_option-props_appendix.png", width=11, height=6)
 ```
 
 Below, we plot a supplementary figure displaying proportions of different high-level response categories over different sets of mentioned alternatives, created similarly to case study 2.
@@ -175,9 +182,54 @@ df_combined_summary %>%
     scale_fill_manual(values = cbp1) +
   scale_y_continuous( breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)) +
    theme(plot.title = element_text(hjust = 0.5),  legend.title = element_text(size=12), legend.text = element_text(size=12), axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 45, margin = margin(t = 10), size = 12)) +
+  guides(fill = guide_legend(nrow = 1)) +
   ylab("") +
   xlab("") +
   facet_grid(.~model, scales = "free_x", space = "free_x") +
   ggtitle("Do you have a blanket?")
+
+#ggsave("figs/cs3_response-props_appendix.png", width=15, height=7)
 ```
 
+Below, we run a multinomial regression model on the high-level response categories, similar to case study 2. We hypothesize that competitor responses will be preferred over otherCategory, exhaustive responses, and taciturn responses. We further explore whether responses mentioning subsets of options (competitor, sameCategory, mostSimilar) are preferred over taciturn and exhaustive responses.
+
+```{r, warning=FALSE, message=FALSE, error=FALSE}
+df_human_main_stats <- df_combined %>% 
+  filter(category != "alternative") %>%
+  filter(category != "other_response") %>% 
+  filter(prompt == "human") %>% 
+  mutate(answerType = factor(category, levels = c('competitor', 'taciturn', 'mostSimilar', 'sameCategory', 'otherCategory', 'fullList')))
+
+contrasts(df_human_main_stats$answerType)
+
+# multinomial regression with intercept only
+multinom_brm <- brm(answerType ~ 1, 
+    data = df_human_main_stats, 
+    family = "categorical",
+    iter = 3000
+    )
+summary(multinom_brm)
+```
+
+```{r}
+multinom_posteriors <- multinom_brm %>% spread_draws(b_musameCategory_Intercept, b_muotherCategory_Intercept, b_mufullList_Intercept, b_mutaciturn_Intercept, b_mumostSimilar_Intercept) %>%
+  mutate(
+    sameCategory_vs_fullList = b_musameCategory_Intercept - b_mufullList_Intercept,
+    sameCategory_vs_otherCategory = b_musameCategory_Intercept - b_muotherCategory_Intercept,
+    sameCategory_vs_taciturn = b_musameCategory_Intercept - b_mutaciturn_Intercept,
+    sameCategory_vs_mostSimilar = b_musameCategory_Intercept - b_mumostSimilar_Intercept
+  )
+
+multinom_posteriors %>% select(sameCategory_vs_fullList, sameCategory_vs_otherCategory, sameCategory_vs_taciturn, sameCategory_vs_mostSimilar) %>%
+  gather(key, val) %>%
+  group_by(key) %>%
+  summarise(
+    '|95%' = quantile(val, probs = c(0.025, 0.975))[[1]],
+    'mean'  = mean(val),
+    '95%|' = quantile(val, probs = c(0.025, 0.975))[[2]],
+    prob_gt_0 = mean(val > 0)*100,
+    prob_lt_0 = mean(val < 0)*100
+  ) -> multinom_posteriors_summary
+
+multinom_posteriors_summary
+```

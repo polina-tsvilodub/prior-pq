@@ -1,0 +1,145 @@
+---
+title: "Case study 3: Prior elicitation of utilities"
+author: "PT"
+date: "2024-06-14"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Experiment
+
+Here we elicit prior utilities for the alternatives that could be mentioned by a pragmatic respondent for [case study 3](https://magpie-ea.github.io/magpie3-qa-overinfo-free-production/experiments/contextSensitive_free_production/) from CogSci.
+The experiment followed the prior elicitation for case study 2, but presented the rating in functional context, drawn from the vignettes of the free production experiment in case study 3. Additionally, utilities were only elicited for the alternatives, given the target trigger from the free production experiment (i.e., not the full utilities matrix was elicited). 
+The live experiment can be found [here](https://magpie-ea.github.io/magpie3-qa-overinfo-free-production/experiments/05-contextSensitive-prior_elicitation/).
+
+```{r}
+library(tidyverse)
+library(tidyboot)
+library(cspplot)
+```
+
+The rated options are categorized as competitor 1 (anticipated to be the best alternative in context 1), competitor 2 (anticipated to be the best alternative in context 2), mostSimilar (a priori most similar object to target), otherCategory (unrelated alternative).
+
+```{r}
+answerOrder <- c('itemQuestion', 'competitor', 'mostSimilar', 'sameCategory', 'otherCategory')
+
+df <- read_csv("../../data/human/case_study_3/e3_prior_elicitation_human.csv")
+# target number of subjects for full experiment: n = 24 * 20 / 4 = 120
+cat("Number of recruited subjects: ", df %>% pull(submission_id) %>% unique() %>% length())
+```
+
+```{r}
+# get main clean data and center responses
+df_clean_main <- df %>% 
+  filter(trial_type == "main") 
+cat("Numbrer of main trial data points that are used for analysis: ", nrow(df_clean_main) )
+
+
+df_clean_main_long <- df_clean_main %>%
+  select(itemName, trialNr, submission_id, targetOption, itemQuestion, competitor, sameCategory, otherCategory, mostSimilar) %>%
+   pivot_longer(cols = c(itemQuestion, competitor, sameCategory, otherCategory, mostSimilar), names_to = 'answerType', values_to = "response") %>%
+  mutate(
+    categorized_response = targetOption
+  ) 
+```
+
+Check for inattentive subject who only provide ratings within 5 points below.
+One subject is excluded because they provided all ratings within 5 points. 
+
+```{r, echo=FALSE}
+df_bad_subj <- df_clean_main_long %>% group_by(submission_id) %>%
+  mutate(bad_subj = (max(response) - min(response)) < 5)
+df_bad_subj %>% filter(bad_subj == TRUE)
+cat("\nnumber of subjects who provided the same responses within 5 points on all main trials:",  df_bad_subj %>% filter(bad_subj == TRUE) %>% pull(submission_id) %>% unique() %>% length())
+bad_subj_ids <- df_bad_subj %>% filter(bad_subj == TRUE) %>% pull(submission_id) %>% unique()
+
+df_clean_main <- df_clean_main %>% filter(!(submission_id %in% bad_subj_ids))
+df_clean_main_long <- df_clean_main_long %>% filter(!(submission_id %in% bad_subj_ids))
+
+```
+
+Check how many ratings / vignette we have:
+```{r}
+df_clean_main %>% count(itemName) %>% pull(n) %>% mean()
+```
+
+## Analysis
+
+We compute the means of the ratings for each alternative, given the target (appropriately for each context). We report these means in the paper.
+
+```{r}
+df_clean_main_summary <- df_clean_main_long %>%
+  group_by(answerType) %>%
+  tidyboot_mean(column = response)
+```
+
+We also calculate by-item means
+```{r}
+df_clean_main_byItem_summary <- df_clean_main_long %>% 
+  group_by(itemName, answerType) %>%
+  summarize(mean_response = mean(response))
+```
+
+Plot across contexts:
+```{r}
+df_clean_main_summary %>%
+  mutate(answerType = factor(answerType, levels = answerOrder, labels = c("target", "competitor", "most similar", "similar option \n(other context competitor)", "unrelated option"))) %>%
+  ggplot(., aes(x = answerType, y = mean, ymin = ci_lower, ymax = ci_upper, fill = answerType)) +
+  geom_col() +
+  geom_errorbar(width = 0.2) +
+  theme(legend.position = "none") +
+  #theme_csp() +
+  xlab("rated option") +
+  ylab("rating")
+```
+
+Plot by context, just to be sure:
+```{r}
+context_nr_names <- read_csv("../../data/human/case_study_3/e3_free_production_human_categorized.csv") %>% 
+  select(context_nr, itemName) %>% unique()
+  
+df_clean_main_long_wContext <- left_join(df_clean_main_long, context_nr_names,
+                                         by=c("itemName"))
+# add context number information
+df_clean_main_summary_byContext <- df_clean_main_long_wContext %>%
+  group_by(answerType, context_nr) %>%
+  tidyboot_mean(column = response)
+
+df_clean_main_summary_byContext %>%
+  mutate(answerType = factor(answerType, levels = answerOrder, labels = c("target", "competitor", "most similar", "similar option", "unrelated option"))) %>%
+  ggplot(., aes(x = answerType, y = mean, ymin = ci_lower, ymax = ci_upper, fill = answerType)) +
+  geom_col() +
+  facet_wrap(~context_nr) +
+  geom_errorbar(width = 0.2) +
+  theme(legend.position = "none", axis.text.x = element_text(angle=45, hjust=1)) +
+  xlab("rated option") +
+  ylab("rating")
+```
+
+For exploration, we plot each participant's responses in each trial connecting them by lines, to confirm that the aggregate ordering preferences were borne out in the single trials. 
+
+```{r}
+num_subj <- df_clean_main_long %>% pull(submission_id) %>% unique() %>% length()
+df_clean_main_long <- df_clean_main_long %>% 
+  mutate(categorized_response = factor(categorized_response, levels = answerOrder),
+         by_trial_nr = rep(1:(num_subj*4), each = 5),
+         by_trial_nr = factor(by_trial_nr)
+         )
+
+
+df_clean_main_long %>%
+  ggplot(., aes(x = answerType, y = response, fill = answerType, color = answerType)) +
+  geom_point(alpha = 0.7) +
+  geom_point(data = df_clean_main_summary, aes(x = answerType, y = mean), size = 4) + 
+  geom_line(data = df_clean_main_long, inherit.aes=F, aes(x = answerType, y = response, group = by_trial_nr), alpha  = 0.4) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme(strip.text.x = element_text(size = 10)) +
+  theme(panel.spacing = unit(3, "lines")) +
+  theme(legend.position="none") +
+  ylab("Rating of alternative") +
+  ylim(0, 100) +
+  xlab("Category of alternative")
+```
