@@ -1,4 +1,4 @@
-Infer({method: 'MCMC', burn: 100, samples: 10000, onlyMAP: true, model: function() {
+Infer({method: 'MCMC', burn: 100, samples: 10000, lag: 10, onlyMAP: true, model: function() {
     var params =
 	{
             policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.1}),
@@ -88,9 +88,10 @@ Infer({method: 'MCMC', burn: 100, samples: 10000, onlyMAP: true, model: function
     var taciturnError = Gaussian({mu: 0.206, sigma: .1}).score(R1PredictionReduced.score('taciturn'))
     var competitorError = Gaussian({mu: 0.512, sigma: .1}).score(R1PredictionReduced.score('competitor'))
     var sameCatError = Gaussian({mu: 0.168, sigma: .1}).score(R1PredictionReduced.score('sameCat'))
+	var exhaustiveError = Gaussian({mu: 0.101, sigma: .1}).score(R1PredictionReduced.score('exhaustive'))
     var mse = taciturnError + competitorError + sameCatError
     console.log(params)
     console.log('error:', mse)
     factor(mse)
-    return params
+    return JSON.stringify(params)
 }})

@@ -103,10 +103,10 @@ empiricalPrior <- function(scenario) {
     mutate(targetOption = fct_relevel(targetOption, 'itemQuestion', 'competitor', 'sameCategory', 'otherCategory')) %>%
     filter(itemName == scenario) %>%
     group_by(targetOption) %>%
-    summarise(itemQuestion = log(mean(itemQuestion)),
-              competitor = log(mean(competitor)),
-              sameCategory = log(mean(sameCategory)),
-              otherCategory = log(mean(otherCategory)))
+    summarise(itemQuestion = mean(itemQuestion),
+              competitor = mean(competitor),
+              sameCategory = mean(sameCategory),
+              otherCategory = mean(otherCategory))
     
   utils <- tibble(
     'utilTarget'       = these_priors$itemQuestion,

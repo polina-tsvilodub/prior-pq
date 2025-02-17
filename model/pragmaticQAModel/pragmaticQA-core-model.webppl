@@ -82,7 +82,7 @@ var R0 = cache(function(question, context, params) {
     condition(meaning(world, question, response))
     return response;
   });
-});
+}, 10000);
 
 // dummy R0 with response set of R1
 var R1ContextFree = cache(function(question, context, params) {
@@ -97,10 +97,10 @@ var R1ContextFree = cache(function(question, context, params) {
     var otherBeliefs = updateBeliefs(context.questionerBeliefs, question, response, context);
     // console.log('updated beliefs: ');
     // terminalViz(otherBeliefs, 4);
-    factor(10 * (-KL(ownBeliefs, otherBeliefs) - cost(response, params)));
+    factor(10*(-KL(ownBeliefs, otherBeliefs) - cost(response, params)));
     return response;
   });
-});
+}, 10000);
 
 // gives updated beliefs about world state after hearing response to question
 // based on a pragmatic interpretation of the response (as emitted by R0)
@@ -182,7 +182,7 @@ var R1ContextPosterior = cache(function(context, question, R1PriorContext, param
       return {label: context_label, sample: context_sample, name: context_sample.name}
     }
   )
-})
+}, 10000)
 
 // R1 Averager is full rational reasoner, integrating over all relevant uncertainty
 // key assumptions:
@@ -234,4 +234,4 @@ var R1Averager = cache(function(context, R1PriorContext, question, params) {
     factor(params.R1Alpha * expectedUtility);
     return response;
   });
-});
+}, 10000);
