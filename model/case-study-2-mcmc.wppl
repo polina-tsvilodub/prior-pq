@@ -1,21 +1,20 @@
-Infer({method: 'MCMC', burn: 100, samples: 10000, onlyMAP: true, model: function() {
+Infer({method: 'MCMC', burn: 100, samples: 1000, onlyMAP: true, model: function() {
     var params =
 	{
             policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.5}),
-            questionerAlpha : uniformDrift({a: 0, b: 10, width: 0.5}),
+            questionerAlpha : uniformDrift({a: 1, b: 10, width: 0.5}),
             R1Alpha         : uniformDrift({a: 0, b: 50, width: 0.5}),
             relevanceBetaR1 : uniformDrift({a: 0, b: 1, width: 0.5}),
-            costWeight      : uniformDrift({a: 0, b: 5, width: 0.5}),	
+            costWeight      : uniformDrift({a: 0, b: 5, width: 0.5}),
 	    failure         : uniformDrift({a: -10, b: 10, width: 1}),
-	    exhaustification: uniformDrift({a: 10, b: 100, width: 10}),
-            questionCost    : 0,
+            questionCost    : 0
 	}
 
     // var params =
     // 	{
-    //         policyAlpha     : 3.57,
+    //         policyAlpha     : 5.7,
     //         questionerAlpha : 9.8,
-    //         R1Alpha         : 15, 
+    //         R1Alpha         : 2.0, 
     //         relevanceBetaR1 : 0.95,
     //         costWeight      : 1.9, 
     // 	    failure         : 2.6,
@@ -98,11 +97,12 @@ Infer({method: 'MCMC', burn: 100, samples: 10000, onlyMAP: true, model: function
 		'other'
     })
     terminalViz(R1PredictionReduced)
-    var taciturnError = Gaussian({mu: 0.206, sigma: .1}).score(R1PredictionReduced.score('taciturn'))
-    var competitorError = Gaussian({mu: 0.512, sigma: .1}).score(R1PredictionReduced.score('competitor'))
-    var sameCatError = Gaussian({mu: 0.168, sigma: .1}).score(R1PredictionReduced.score('sameCat'))
-    var exhaustiveError = Gaussian({mu: 0.14, sigma: .1}).score(R1PredictionReduced.score('exhaustive'))
-    var mse = taciturnError + competitorError + sameCatError + exhaustiveError
+    var taciturnError = Gaussian({mu: Math.log(0.206), sigma: .1}).score(R1PredictionReduced.score('taciturn'))
+    var competitorError = Gaussian({mu: Math.log(0.512), sigma: .1}).score(R1PredictionReduced.score('competitor'))
+    var sameCatError = Gaussian({mu: Math.log(0.168), sigma: .1}).score(R1PredictionReduced.score('sameCat'))
+    var exhaustiveError = Gaussian({mu: Math.log(0.101), sigma: .1}).score(R1PredictionReduced.score('exhaustive'))
+    var otherCatError = Gaussian({mu: Math.log(0.014), sigma: .1}).score(R1PredictionReduced.score('otherCat')) 
+    var mse = taciturnError + competitorError + sameCatError + otherCatError // exhaustiveError 
     console.log(params)
     console.log('error:', mse)
     factor(mse)

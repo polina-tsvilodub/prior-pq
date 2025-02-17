@@ -49,17 +49,6 @@ var DPValue = cache(function(beliefs, context, params) {
 }, 1000);
 
 // gives updated beliefs about world state after hearing response to question
-// based on a literal interpretation of the response
-var updateBeliefsLiteral = cache(function(beliefs, question, response, context) {
-  var meaning = context.meaning;
-  return Infer({method: 'enumerate'}, function() {
-    var world = sample(beliefs);
-    condition(meaning(world, question, response));
-    return world;
-  });
-});
-
-// gives updated beliefs about world state after hearing response to question
 // based on reasoning about R0 producing the response
 var updateBeliefsR0 = cache(function(beliefs, question, response, context) {
   return Infer({method: 'enumerate'}, function() {
@@ -98,15 +87,41 @@ var Q1 = cache(function(context, params) {
 // the questioner's beliefs and/or preferences.
 //////////////////////////////////////////////////
 
-var R1 = cache(function(question, context, params) {
+// gives updated beliefs about world state after hearing response to question
+// based on a literal interpretation of the response
+var updateBeliefsLiteral = cache(function(beliefs, question, response, context) {
+  var meaning = context.meaning;
+  return Infer({method: 'enumerate'}, function() {
+    var world = sample(beliefs);
+    condition(meaning(world, question, response));
+    return world;
+  });
+});
+
+// var R1 = cache(function(question, context, params) {
+//   var getLicensedResponsesR1 = context.getLicensedResponsesR1;
+//   var responses = filter(function(r) {!isContradiction(context, question, r)},
+//                          getLicensedResponsesR1(question));
+//   return Infer({method: 'enumerate'}, function(){
+//     var response = uniformDraw(responses);
+//     var ownBeliefs = context.R1PriorOverWorlds;
+//     var otherBeliefs = updateBeliefsLiteral(context.questionerBeliefs, question, response, context);
+//     factor(10 * (-KL(ownBeliefs, otherBeliefs)));
+//     return response;
+//   });
+// }, 1000);
+
+var R0_fullResponses = cache(function(question, context, params) {
   var getLicensedResponsesR1 = context.getLicensedResponsesR1;
+  var meaning = context.meaning;
   var responses = filter(function(r) {!isContradiction(context, question, r)},
                          getLicensedResponsesR1(question));
   return Infer({method: 'enumerate'}, function(){
     var response = uniformDraw(responses);
     var ownBeliefs = context.R1PriorOverWorlds;
     var otherBeliefs = updateBeliefsLiteral(context.questionerBeliefs, question, response, context);
-    factor(params.exhaustification * (-KL(ownBeliefs, otherBeliefs) - responseCost(response, params)));
+    var world = ownBeliefs.support()[0]
+    condition(meaning(world, question, response))
     return response;
   });
 }, 1000);
@@ -117,11 +132,13 @@ var updateBeliefsR1 = cache(function(beliefs, question, response, context, param
   var meaning = context.meaning;
   return Infer({method: 'enumerate'}, function() {
     var world = sample(beliefs);
-    var newContext = extend(context, {R1PriorOverWorlds: Delta({v: world})})
-    observe(R1(question, newContext, params), response)
+      var newContext = extend(context, {R1PriorOverWorlds: Delta({v: world})})
+      observe(R0_fullResponses(question, newContext, params), response)
+      // console.log(question, world)
+      // terminalViz(R1(question, newContext, params))
     return world;
   });
-}, 1000);
+}, 1000); 
 
 var R1ContextPosterior = cache(function(context, question, R1PriorContext, params) {
   Infer({method:'enumerate'}, function() {
@@ -150,9 +167,9 @@ var R1Averager = cache(function(context, R1PriorContext, question, params) {
   );
   return Infer({method: 'enumerate'}, function(){
     var response = uniformDraw(responses);
-    var expectedUtility = expectation(contextPosterior, function(newContext) {
+      var expectedUtility = expectation(contextPosterior, function(newContext) {
       var otherBeliefs = updateBeliefsR1(
-        newContext.questionerBeliefs, question, response, newContext, params
+          newContext.questionerBeliefs, question, response, newContext, params
       );
       var decisionProblem = newContext.decisionProblem;
       var actionPolicy = getActionPolicy(otherBeliefs, newContext, params);
