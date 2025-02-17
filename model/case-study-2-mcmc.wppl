@@ -1,14 +1,27 @@
 Infer({method: 'MCMC', burn: 100, samples: 10000, onlyMAP: true, model: function() {
     var params =
 	{
-            policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.1}),
-            questionerAlpha : uniformDrift({a: 0, b: 10, width: 0.1}),
-            R1Alpha         : uniformDrift({a: 0, b: 10, width: 0.1}),
-            relevanceBetaR1 : uniformDrift({a: 0, b: 1, width: 0.1}),
-            costWeight      : uniformDrift({a: 0, b: 2, width: 0.1}),	
-	    failure       : uniformDrift({a: -10, b: 10, width: 1}),	    
+            policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.5}),
+            questionerAlpha : uniformDrift({a: 0, b: 10, width: 0.5}),
+            R1Alpha         : uniformDrift({a: 0, b: 50, width: 0.5}),
+            relevanceBetaR1 : uniformDrift({a: 0, b: 1, width: 0.5}),
+            costWeight      : uniformDrift({a: 0, b: 5, width: 0.5}),	
+	    failure         : uniformDrift({a: -10, b: 10, width: 1}),
+	    exhaustification: uniformDrift({a: 10, b: 100, width: 10}),
             questionCost    : 0,
 	}
+
+    // var params =
+    // 	{
+    //         policyAlpha     : 3.57,
+    //         questionerAlpha : 9.8,
+    //         R1Alpha         : 15, 
+    //         relevanceBetaR1 : 0.95,
+    //         costWeight      : 1.9, 
+    // 	    failure         : 2.6,
+    // 	    exhaustification: 51,
+    //         questionCost    : 0,
+    // 	}
 
     var contextTarget = extend(
 	tsoContext,
@@ -88,7 +101,8 @@ Infer({method: 'MCMC', burn: 100, samples: 10000, onlyMAP: true, model: function
     var taciturnError = Gaussian({mu: 0.206, sigma: .1}).score(R1PredictionReduced.score('taciturn'))
     var competitorError = Gaussian({mu: 0.512, sigma: .1}).score(R1PredictionReduced.score('competitor'))
     var sameCatError = Gaussian({mu: 0.168, sigma: .1}).score(R1PredictionReduced.score('sameCat'))
-    var mse = taciturnError + competitorError + sameCatError
+    var exhaustiveError = Gaussian({mu: 0.14, sigma: .1}).score(R1PredictionReduced.score('exhaustive'))
+    var mse = taciturnError + competitorError + sameCatError + exhaustiveError
     console.log(params)
     console.log('error:', mse)
     factor(mse)

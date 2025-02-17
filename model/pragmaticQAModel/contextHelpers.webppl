@@ -17,6 +17,15 @@
 // TODO: check if the meaning function for the minimal context models
 // can be subsumed under this one.
 
+// returns TRUE if a response is contradictory in the light of the question
+// example: "Do you have any pie?" - "No, we have lemon pie."
+var isContradiction = function(context, question, response) {
+  var meaning = context.meaning;
+  return all(function(world) {
+    !meaning(world,question,response)
+  }, context.worlds)
+}
+
 var prepareContextSets = function(atoms) {
 
   // The function 'makePowerSet' takes a list of atoms as input and
