@@ -17,6 +17,7 @@ var tsoContext = {
     {type: 'single-item', queried: ['target'], text: 'Target?'},
     {type: 'single-item', queried: ['competitor'], text: 'Competitor?'},
     {type: 'single-item', queried: ['sameCat'], text: 'Same Category?'},
+    {type: 'wh', queried: tsoAtoms, text: 'Which elements?'},
     {type: 'single-item', queried: ['otherCat'], text: 'Other Category?'}
   ],
   questionerBeliefs: Categorical({vs: tsoPowerSet}),

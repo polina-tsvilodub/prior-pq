@@ -106,5 +106,5 @@ Infer({method: 'MCMC', burn: 100, samples: 1000, onlyMAP: true, model: function(
     console.log(params)
     console.log('error:', mse)
     factor(mse)
-    return params
+    return JSON.stringify(params)
 }})

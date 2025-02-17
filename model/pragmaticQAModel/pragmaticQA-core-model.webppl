@@ -141,13 +141,21 @@ var updateBeliefsR1 = cache(function(beliefs, question, response, context, param
 }, 1000); 
 
 var R1ContextPosterior = cache(function(context, question, R1PriorContext, params) {
-  Infer({method:'enumerate'}, function() {
-    var label = sample(R1PriorContext.distribution);
-    var newContext = extend(R1PriorContext[label], {R1PriorOverWorlds: context.R1PriorOverWorlds});
-    factor(Q1(newContext, params).score(question.text));
-    return {label: label, sample: newContext, name: newContext.name}
-  })
-}, 1000)
+  Infer(
+    {method:'enumerate'},
+    function() {
+      var context_label  = sample(R1PriorContext.distribution);
+      var context_sample = extend(
+        R1PriorContext[context_label],
+        {R1PriorOverWorlds: context.R1PriorOverWorlds});
+      var questioner = Q1(context_sample, params);
+      // console.log("considering context: ", context_label);
+      // console.log("prob of question ", question.text, ": ", questioner.score(question.text));
+      factor(questioner.score(question.text));
+      return {label: context_label, sample: context_sample, name: context_sample.name}
+    }
+  )
+}, 10000)
 
 // R1 Averager is full rational reasoner, integrating over all relevant uncertainty
 // key assumptions:
@@ -185,4 +193,4 @@ var R1Averager = cache(function(context, R1PriorContext, question, params) {
     factor(params.R1Alpha * expectedUtility);
     return response;
   });
-}, 1000);
+}, 10000);
