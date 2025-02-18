@@ -77,15 +77,24 @@ df_combined_exploded <- df_combined %>% filter(category != "alternative") %>%
   # remove white spaces and split the annotations of mentioned option types
   mutate(option_category = gsub(" ", "", option_category)) %>%
   separate_rows(option_category, sep=",")
-
+ 
 df_combined_exploded_summary <- df_combined_exploded %>%
   rowwise() %>%
   filter(option_category %in% optionOrder) %>%
   group_by(context_nr, model, prompt) %>%
   mutate(context_count = n()) %>%
   group_by(model, prompt, context_nr, option_category) %>%
-  summarise(mentioned_option_proportion = n() / context_count) %>%
-  unique() 
+  summarise(mentioned_option_proportion = n() / context_count, 
+            n = n(),  # Get sample size
+    .groups = "drop"
+  ) %>%
+  mutate(
+    se = sqrt((mentioned_option_proportion * (1 - mentioned_option_proportion)) / n),
+    ci_upper = mentioned_option_proportion + 1.96 * se,
+    ci_lower = mentioned_option_proportion - 1.96 * se
+  ) %>%
+  mutate(ci_lower = ifelse(ci_lower < 0, 0, ci_lower)) %>%
+  unique()
   
 df_combined_exploded_summary %>%
   filter((prompt == "human") | ((prompt %in% c("one-shot CoT", "zero-shot") ) & (model == "Mixtral-Inst.")  )) %>%
@@ -95,6 +104,7 @@ df_combined_exploded_summary %>%
          `Mentioned option` = option_category) %>%
   ggplot(., aes(x = context_nr, y = mentioned_option_proportion, fill = `Mentioned option`)) +
   geom_col(position = position_dodge()) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = cbp1) +
   facet_grid(.~model_prompt) +
   xlab("") +
