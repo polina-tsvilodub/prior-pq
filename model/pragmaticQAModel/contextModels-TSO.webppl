@@ -17,6 +17,7 @@ var tsoContext = {
     {type: 'single-item', queried: ['target'], text: 'Target?'},
     {type: 'single-item', queried: ['competitor'], text: 'Competitor?'},
     {type: 'single-item', queried: ['sameCat'], text: 'Same Category?'},
+    {type: 'wh', queried: tsoAtoms, text: 'Which elements?'},
     {type: 'single-item', queried: ['otherCat'], text: 'Other Category?'}
   ],
   questionerBeliefs: Categorical({vs: tsoPowerSet}),
@@ -37,9 +38,7 @@ var tsoContext = {
       // by definition polar questions require 'yes'/'no' answer
       return ['yes', 'no'];
     } else if(question.type == 'polar-disjunct') {
-      // by definition polar questions require 'yes'/'no' answer
-      var answers = ['yes', 'no'].concat(question.queried);
-      return answers;
+      return ['yes', 'no'].concat(question.queried);
     } else if(question.type == 'wh') {
       // 'wh' questions allow you to say any set of queried items,
       // or to say "nothing" when none of the querried items exist

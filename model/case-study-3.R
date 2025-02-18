@@ -4,6 +4,7 @@ library(aida)    # remotes::install_github("michael-franke/aida-package")
 library(readr)
 library(furrr)
 library(feather)
+library(here)
 
 ##################################################
 
@@ -56,8 +57,8 @@ run_model_tsos <- function (params, utils) {
     cbind(utils)
   
   webppl(
-    program_file = "./03-current-models-webppl/06-run-multicontext-prior-predictive-R.webppl",
-    packages = c("./03-current-models-webppl/pragmaticQAModel"),
+    program_file = here("model/case-study-3.wppl"),
+    packages = here("model/pragmaticQAModel"),
     data = webPPL_data,
     data_var = "RInput"
   ) -> output
@@ -67,12 +68,13 @@ run_model_tsos <- function (params, utils) {
 
 priorSampleParams <- function() {
   params <- tibble(
-    'policyAlpha'      = runif(1,min = 3, max = 3), # searched 0-10
-    'questionerAlpha'  = runif(1,min = 5, max = 5), # searched 0-10
-    'R1Alpha'          = runif(1,min = 9, max = 9), # searched 0-10
+    'policyAlpha'      = runif(1,min = 9.035, max = 9.035), # searched 0-10
+    'questionerAlpha'  = runif(1,min = 1.076, max = 1.076), # searched 0-10
+    'R1Alpha'          = runif(1,min = 6.025, max = 6.025), # searched 0-50
     'relevanceBetaR0'  = runif(1,min = 0, max = 0), # fixed at 0
-    'relevanceBetaR1'  = runif(1,min = 0.1, max = 0.1), # searched 0-1
-    'costWeight'       = runif(1,min = 0.9, max = 0.9), # searched 0-1
+    'relevanceBetaR1'  = runif(1,min = 0.023, max = 0.023), # searched 0-1
+    'costWeight'       = runif(1,min = 1.559, max = 1.559), # searched 0-5
+    'failure'          = runif(1,min = -1.179, max = -1.179), # searched -10 to 10
     'questionCost'     = runif(1,min = 0, max = 0) # fixed at 0
   )
   return(params)
@@ -95,7 +97,7 @@ empiricalPrior <- function(scenario) {
 }
 
 # run samples in parallel 
-samples_each = 200 
+samples_each = 10
 scenarios_rep = rep(scenarios, samples_each)
 n_samples = length(scenarios_rep)
 
@@ -125,8 +127,8 @@ priorPred <- furrr::future_map_dfr(1:n_samples, function(i) {
 }, .progress = TRUE, .options = furrr_options(seed = 123))
 
 if (param_search == TRUE) {
-  write_csv(priorPred, './03-current-models-webppl/data/case_study_3_parameter_search.csv')
+  write_csv(priorPred, here('data/priorpq/case_study_3/c3_parameter_search.csv'))
 } else {
-  write_csv(priorPred, './03-current-models-webppl/data/case_study_3_RSA_preds.csv')
+  write_csv(priorPred, here('data/priorpq/case_study_3/c3_model_preds.csv'))
 }
 
