@@ -10,7 +10,6 @@ library(tidyverse)
 library(tidyboot)
 library(brms)
 library(tidybayes)
-library(ggpattern)
 library(philentropy)
 ```
 
@@ -21,6 +20,7 @@ We calculate the Jensen-Shannon divergence as a measure of closeness of model pr
 
 ```{r, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
 answerOrder <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive')
+answerLabels <- c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive', 'undefined responses', 'alternative')
 
 ## case study 2 ##
 df_human_cs2 <- read_csv("../data/human/case_study_2/e2_free_production_human_categorized.csv") %>%
@@ -52,7 +52,7 @@ model_preds_2 <- read_csv("../data/priorpq/case_study_2/c2_model_preds_full.csv"
       support == "otherCat" ~ 'other category',
       support == "exhaustive" ~ 'exhaustive',
       .default = "other response"
-    ) %>% factor(levels = answerOrder)) %>%
+    ) %>% factor(levels = answerLabels)) %>%
   select(-policyAlpha, -questionerAlpha, -R1Alpha, -relevanceBetaR0,
          -relevanceBetaR1, -costWeight, -failure, -questionCost, -run) 
 

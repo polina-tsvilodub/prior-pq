@@ -12,6 +12,16 @@ library(tidyboot)
 library(brms)
 library(tidybayes)
 library(ggthemes)
+
+project_colors = c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#000000")
+
+# setting theme colors globally
+scale_colour_discrete <- function(...) {
+  scale_colour_manual(..., values = project_colors)
+}
+scale_fill_discrete <- function(...) {
+  scale_fill_manual(..., values = project_colors)
+} 
 ```
 
 # Case study 3
@@ -42,6 +52,7 @@ Alternative and other_response answers are excluded from main analyses.
 answerOrder <- c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'mostSimilar', 'fullList', 'other_response',  'alternative')
 answerLabels <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive', 'undefined responses', 'alternative')
 optionOrder <- c("competitor_c1", "competitor_c2", "mostSimilar", "otherCategory")
+modelAnswerOrder <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive')
 cbp1 <- c("#E69F00", "#56B4E9", "#009E73",
           "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#999999")
 
@@ -67,7 +78,22 @@ df_llms <- read_csv("../data/llms/case_study_3/e3_llms_results_annotated.csv") %
                            model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
                            TRUE ~ model))
 
-## TODO: read RSA data here ##
+model_preds_3 <- read_csv("../data/priorpq/case_study_3/c3_model_preds_full.csv") %>%
+  mutate(model = "PRIOR-PQ") %>%
+  dplyr::mutate(
+    answerType = dplyr::case_when(
+      support == "taciturn" ~ 'taciturn',
+      support == "competitor" ~ 'competitor',
+      support == "sameCat" ~ 'same category',
+      support == "otherCat" ~ 'other category',
+      support == "mostSimilar" ~ 'most similar',
+      support == "exhaustive" ~ 'exhaustive',
+      .default = "other response"
+    ) %>% factor(levels = modelAnswerOrder)) %>%
+  select(-policyAlpha, -questionerAlpha, -R1Alpha, -relevanceBetaR0,
+         -relevanceBetaR1, -costWeight, -failure, -questionCost) %>%
+  rename(itemName = scenario) %>%
+  select(-support)
 
 df_combined <- rbind(
   df_human %>% mutate(model = "Humans", prompt = "human"),
@@ -251,4 +277,98 @@ multinom_posteriors %>% select(sameCategory_vs_fullList, sameCategory_vs_otherCa
   ) -> multinom_posteriors_summary
 
 multinom_posteriors_summary
+```
+
+```{r appendix-by-item}
+scenarios_3 <- unique(df_human$itemName)
+
+llm_3_props <- df_llms %>%
+  filter(itemName %in% scenarios_3) %>%
+  mutate(model = paste(prompt, model, sep = "_")) %>%
+  filter(answerType != "alternative",
+         answerType != "undefined responses") %>%
+  group_by(model, itemName, answerType) %>%
+  count() %>%
+  ungroup() %>%
+  group_by(model, itemName) %>%
+  mutate(model_prop = n/sum(n)) %>%
+  select(-n) %>%
+  ungroup() %>%
+  pivot_wider(names_from = model, values_from = model_prop) %>%
+  rename(one_shot_cot_mixtral_instruct = `one-shot CoT_Mixtral-Inst.`,
+         zero_shot_mixtral_instruct = `zero-shot_Mixtral-Inst.`) %>%
+  select(itemName, answerType, one_shot_cot_mixtral_instruct, zero_shot_mixtral_instruct) %>%
+  replace_na(list(one_shot_cot_mixtral_instruct = 0, zero_shot_mixtral_instruct = 0))
+
+model_3 <- model_preds_3 %>%
+  filter(answerType != "alternative",
+         answerType != "undefined responses") %>%
+  select(itemName, answerType, prob) %>%
+  filter(answerType != "other response",
+         answerType != "unclassified") %>%
+  filter(!is.na(answerType)) %>%
+  group_by(itemName, answerType) %>%
+  summarise(prob = sum(prob)) %>%
+  ungroup() %>%
+  group_by(itemName) %>%
+  mutate(prob = prob/sum(prob)) %>%
+  ungroup() %>%
+  complete(answerType, nesting(itemName)) 
+
+all_models_human_3 <- model_3 %>%
+  rename(model_prob = prob) %>%
+  complete(itemName, nesting(answerType)) %>%
+  left_join(df_human %>% 
+              filter(answerType != "alternative",
+              answerType != "undefined responses") %>%
+              group_by(itemName, answerType) %>%
+              count() %>%
+              ungroup() %>%
+              group_by(itemName) %>%
+              mutate(human_prop = n/sum(n)) %>%
+              select(-n), 
+            by = c("itemName", "answerType")) %>%
+  left_join(llm_3_props, by = c("itemName", "answerType")) %>%
+  replace_na(list(human_prop = 0, model_prob = 0,
+                  one_shot_cot_mixtral_instruct = 0,
+                  zero_shot_mixtral_instruct = 0)) 
+
+by_item_plot <- all_models_human_3 %>%
+  pivot_longer(c('human_prop','model_prob',
+                 'one_shot_cot_mixtral_instruct',
+                 'zero_shot_mixtral_instruct'),
+               names_to = 'model',
+               values_to = 'prop') %>%
+  mutate(model = case_when(model == "human_prop" ~ "Human",
+                           model == "model_prob" ~ "PRIOR-PQ",
+                           model == 'one_shot_cot_mixtral_instruct' ~
+                             "One-shot CoT Mixtral",
+                           model == 'zero_shot_mixtral_instruct' ~
+                             "Zero-shot Mixtral"),
+         model = factor(model,
+                        levels = c("Human", "PRIOR-PQ",
+                                 "Zero-shot Mixtral",
+                                 "One-shot CoT Mixtral"),
+                        labels = c("Human", "PRIOR-PQ",
+                                   "Zero-shot\nMixtral",
+                                   "One-shot CoT\nMixtral"))) %>%
+  ggplot(aes(x = model, y = prop, fill = answerType)) +
+  geom_bar(position="stack", stat="identity") +
+  scale_x_discrete(drop = TRUE) +
+  facet_wrap(~itemName, scales = "free") +
+  ylab("Proportion of answer") +
+  xlab("") +
+  theme(axis.text.x = element_text(angle 
+                                   = 45, vjust = 1, hjust=1,
+                                   size=10),
+        panel.background = element_blank(),
+        panel.grid.minor = element_blank(), panel.grid.major = element_blank(),
+        legend.title=element_blank(),
+        legend.text=element_text(size=10),
+        strip.background = element_blank(),
+        axis.text.y=element_blank(),
+  strip.text.x = element_blank()) + 
+  scale_fill_discrete()
+
+ggsave('figs/cs3_appendix_item_plot.png', by_item_plot, width = 10, height = 9)
 ```
