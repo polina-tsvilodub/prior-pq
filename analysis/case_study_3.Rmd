@@ -7,6 +7,11 @@ output: github_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidyboot)
+library(brms)
+library(tidybayes)
+library(ggthemes)
 ```
 
 # Case study 3
@@ -104,12 +109,16 @@ df_combined_exploded_summary %>%
          `Mentioned option` = option_category) %>%
   ggplot(., aes(x = context_nr, y = mentioned_option_proportion, fill = `Mentioned option`)) +
   geom_col(position = position_dodge()) +
-  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2, position = position_dodge(width = 0.9)) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0, position = position_dodge(width = 0.9)) +
   scale_fill_manual(values = cbp1) +
-  facet_grid(.~model_prompt) +
+  facet_grid(. ~ model_prompt) +
+  
   xlab("") +
   ylab("") +
-  theme(axis.text.x = element_text(angle = 45, hjust =1))
+  theme(axis.text.x = element_text(angle = 45, hjust =1)) +
+  theme_few()
+
+ggsave("figs/Fig3B.pdf", width=10, height=5)
 ```
 
 Below, we calculate statistics on results reported in the main part of the paper, comparing the proportion of different competitors over other alternatives mentioned in the responses, depending on the context.

@@ -78,6 +78,7 @@ Below, plots are created. We plot the proportions of each response category for 
 # human responses
 df_human_main <- df_human %>%
   filter((answerType != "alternative") & (answerType != "undefined responses"))
+
 df_llms_main <- df_llms %>% 
   filter((answerType != "alternative") & (answerType != "undefined responses"))
 
@@ -98,6 +99,14 @@ df_llms_main_summary <- df_llms_main  %>%
             answerType_proportion = answerType_count / model_prompt_count
             )  %>% unique()
 
+df_rsa_main_summary <- read_csv("../data/priorpq/case_study_2/c2_model_preds.csv") %>%
+  mutate(model = 'prior-pq',
+         prompt = 'prior-pq') %>%
+  mutate(answerType = factor(support,  levels = c('taciturn', 'competitor', 'sameCat', 'otherCat', 'exhaustive'), 
+                                       labels = c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive'))) %>%
+  rename(answerType_proportion = prob) %>%
+  select(prompt, model, answerType, answerType_proportion)
+
 # TODO: add RSA responses
 ```
 
@@ -107,21 +116,31 @@ cbp1 <- c("#E69F00", "#56B4E9", "#009E73",
 
 # plot LLM results 
 df_llms_main_summary %>% 
-  mutate(prompt = factor(prompt, levels = c("zero-shot", "one-shot Explanation", "one-shot QA", "one-shot CoT"), 
-                         labels = c("zero-shot\n(V)", "one-shot\nExplanation\n(I+II+IV+V)", "one-shot\nQA (I+III+IV+V)", "one-shot\nCoT (I-V)")),
-    model = factor(model, levels = c("Humans", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst."))) %>%
+  mutate(prompt = factor(prompt, 
+                         levels = c("prior-pq", "zero-shot", "one-shot Explanation", "one-shot QA", "one-shot CoT"), 
+                         labels = c("prior-pq", "zero-shot\n(V)", "one-shot\nExplanation\n(I+II+IV+V)", 
+                                    "one-shot\nQA (I+III+IV+V)", "one-shot\nCoT (I-V)")),
+       model = factor(model, levels = c("Humans", "prior-pq", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst."))) %>%
   filter((prompt %in% c("one-shot\nCoT (I-V)", "zero-shot\n(V)") ) & (model == "Llama-3-70B-Inst.")) %>%
   ggplot(., aes(x = prompt, y = answerType_proportion, fill = answerType)) +
-  geom_col(color = "#575463", width = 0.9)+ 
-  geom_col(data = df_human_main_summary, aes(x = prompt, y = answerType_proportion, fill = answerType), width = 0.9, color = "#575463") +
-  scale_fill_manual(values = cbp1) +
-  scale_y_continuous( breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)) +
-   theme(plot.title = element_text(hjust = 0.5),  legend.title = element_text(size=12), legend.text = element_text(size=12), axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 45, margin = margin(t = 10), size = 12)) +
-  ylab("") +
-  xlab("") +
-  facet_grid(.~model, scales = "free_x", space = "free_x") +
-  ggtitle("Do you have iced tea?")
+    geom_col(color = "#575463", width = 0.9)+ 
+    geom_col(data = df_rsa_main_summary, aes(x = prompt, y = answerType_proportion, fill = answerType), 
+             width = 0.9, color = "#575463") +
+    geom_col(data = df_human_main_summary, aes(x = prompt, y = answerType_proportion, fill = answerType), 
+             width = 0.9, color = "#575463") +
+    scale_fill_manual(values = cbp1) +
+    scale_y_continuous( breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)) +
+    theme(plot.title = element_text(hjust = 0.5),  
+          legend.title = element_text(size=12), 
+          legend.text = element_text(size=12), 
+          axis.ticks.x = element_blank(), 
+          axis.text.x = element_text(angle = 45, margin = margin(t = 10), size = 12)) +
+    ylab("") +
+    xlab("") +
+    facet_grid(.~model, scales = "free_x", space = "free_x") +
+    ggtitle("Do you have iced tea?")
 
+ggsave("figs/Fig3A.pdf", width=8, height=5)
 ```
 
 Below some exploratory statistical analyses on human data are computed. The analyses investigate whether: 
