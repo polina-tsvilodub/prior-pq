@@ -107,10 +107,10 @@ empiricalPrior <- function(scenario) {
     sample_n(1)
     
   utils <- tibble(
-    'utilTarget'       = these_priors$itemQuestion,
-    'utilCompetitor'   = these_priors$competitor,
-    'utilSameCat'      = these_priors$sameCategory,
-    'utilOtherCat'     = these_priors$otherCategory
+    'utilTarget'       = these_priors$itemQuestion/10,
+    'utilCompetitor'   = these_priors$competitor/10,
+    'utilSameCat'      = these_priors$sameCategory/10,
+    'utilOtherCat'     = these_priors$otherCategory/10
   )
   return(utils)
 }
