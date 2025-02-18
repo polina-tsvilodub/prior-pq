@@ -36,18 +36,24 @@ urlfile = "https://raw.githubusercontent.com/magpie-ea/magpie3-qa-overinfo-free-
 priors <- read_csv(url(urlfile))
 scenarios <- unique(empirical_responses$itemName)
 
+full_matrix <- priors %>%
+  filter(trial_type == "main") %>%
+  select(submission_id, itemName, targetOption, mostSimilar,
+         itemQuestion, competitor, otherCategory, sameCategory) 
+
+
 #######################################
-
-policyAlpha = c(1,3,5,7,9)
-questionerAlpha = c(1,3,5,7,9)
-R1Alpha = c(1,3,5,7,9)
-relevanceBetaR0 = c(0)
-relevanceBetaR1 = c(0.1, 0.3, 0.5, 0.7, 0.9)
-costWeight = c(0.1, 0.3, 0.5, 0.7, 0.9)
-n_sample <- c(1,2,3,4,5)
-questionCost <- c(0)
-
-param_space <- expand_grid(policyAlpha, questionerAlpha, R1Alpha, relevanceBetaR0, relevanceBetaR1, costWeight, questionCost, scenarios, n_sample)
+# 
+# policyAlpha = c(1,3,5,7,9)
+# questionerAlpha = c(1,3,5,7,9)
+# R1Alpha = c(1,3,5,7,9)
+# relevanceBetaR0 = c(0)
+# relevanceBetaR1 = c(0.1, 0.3, 0.5, 0.7, 0.9)
+# costWeight = c(0.1, 0.3, 0.5, 0.7, 0.9)
+# n_sample <- c(1,2,3,4,5)
+# questionCost <- c(0)
+# 
+# param_space <- expand_grid(policyAlpha, questionerAlpha, R1Alpha, relevanceBetaR0, relevanceBetaR1, costWeight, questionCost, scenarios, n_sample)
 
 ##############################################
 
@@ -68,43 +74,48 @@ run_model_tsos <- function (params, utils) {
 
 priorSampleParams <- function() {
   params <- tibble(
-    'policyAlpha'      = runif(1,min = 9.035, max = 9.035), # searched 0-10
-    'questionerAlpha'  = runif(1,min = 1.076, max = 1.076), # searched 0-10
-    'R1Alpha'          = runif(1,min = 6.025, max = 6.025), # searched 0-50
+    'policyAlpha'      = runif(1,min = 8.536908820191446, max = 8.536908820191446), # searched 0-10
+    'questionerAlpha'  = runif(1,min = 5.892578142591768, max = 5.892578142591768), # searched 0-10
+    'R1Alpha'          = runif(1,min = 2.9436908699427895, max = 2.9436908699427895), # searched 0-50
     'relevanceBetaR0'  = runif(1,min = 0, max = 0), # fixed at 0
-    'relevanceBetaR1'  = runif(1,min = 0.023, max = 0.023), # searched 0-1
-    'costWeight'       = runif(1,min = 1.559, max = 1.559), # searched 0-5
-    'failure'          = runif(1,min = -1.179, max = -1.179), # searched -10 to 10
+    'relevanceBetaR1'  = runif(1,min = 0.2907849349998428, max = 0.2907849349998428), # searched 0-1
+    'costWeight'       = runif(1,min = 2.3421835313724717, max = 2.3421835313724717), # searched 0-5
+    'failure'          = runif(1,min = -5.936552662124935, max = -5.936552662124935), # searched -10 to 10
     'questionCost'     = runif(1,min = 0, max = 0) # fixed at 0
   )
   return(params)
 }
 
 
-empiricalPrior <- function(scenario) {
-  these_priors <- priors %>% 
-    filter(itemName == scenario) %>%
-    sample_n(1)
-    
+empiricalPrior <- function() {
+  these_priors <- full_matrix %>% 
+    # filter(itemName == scenario) %>%
+    # group_by(targetOption) %>%
+    summarise(itemQuestion = mean(itemQuestion)/10,
+              competitor = mean(competitor)/10,
+              sameCategory = mean(sameCategory)/10,
+              mostSimilar = mean(mostSimilar)/10,
+              otherCategory = mean(otherCategory)/10)
+  
   utils <- tibble(
     'utilTarget'       = these_priors$itemQuestion,
     'utilCompetitor'   = these_priors$competitor,
     'utilSameCat'      = these_priors$sameCategory,
     'utilOtherCat'     = these_priors$otherCategory,
-    'utilMostSimilar'     = these_priors$mostSimilar
+    'utilMostSimilar'  = these_priors$mostSimilar
   )
   return(utils)
 }
 
 # run samples in parallel 
-samples_each = 10
-scenarios_rep = rep(scenarios, samples_each)
-n_samples = length(scenarios_rep)
+# samples_each = 1
+# scenarios_rep = rep(scenarios, samples_each)
+n_samples = 1 # length(scenarios_rep)
 
 
 param_search = FALSE
 
-plan(multisession, workers = 100)
+plan(multisession, workers = 8)
 
 if (param_search == TRUE) {
   n_samples = nrow(param_space)
@@ -118,7 +129,7 @@ priorPred <- furrr::future_map_dfr(1:n_samples, function(i) {
     scenario = scenarios_rep[i]
     params <- priorSampleParams()
   }
-  utils  <- empiricalPrior(scenario)
+  utils  <- empiricalPrior()
   out    <- tibble('run' = i) %>%
     cbind(params) %>%
     cbind(scenario) %>%

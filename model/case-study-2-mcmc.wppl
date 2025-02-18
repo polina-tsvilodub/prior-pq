@@ -1,26 +1,25 @@
-var best_params = Infer({method: 'MCMC', burn: 100, samples: 5000, onlyMAP: true, model: function() {
-    var params =
-	{
-            policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.5}),
-            questionerAlpha : uniformDrift({a: 0, b: 10, width: 0.5}),
-            R1Alpha         : uniformDrift({a: 0, b: 50, width: 0.5}),
-            relevanceBetaR1 : uniformDrift({a: 0, b: 1, width: 0.5}),
-            costWeight      : uniformDrift({a: 0, b: 5, width: 0.5}),
-	    	failure         : uniformDrift({a: -10, b: 10, width: 1}),
-            questionCost    : 0
-	}
-
+var best_params = Infer({method: 'MCMC', samples: 5000, onlyMAP: true, model: function() {
     // var params =
     // 	{
-    //         policyAlpha     : 5.7,
-    //         questionerAlpha : 9.8,
-    //         R1Alpha         : 2.0, 
-    //         relevanceBetaR1 : 0.95,
-    //         costWeight      : 1.9, 
-    // 	    failure         : 2.6,
-    // 	    exhaustification: 51,
-    //         questionCost    : 0,
+    //         policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.5}),
+    //         questionerAlpha : uniformDrift({a: 0, b: 10, width: 0.5}),
+    //         R1Alpha         : uniformDrift({a: 0, b: 50, width: 0.5}),
+    //         relevanceBetaR1 : uniformDrift({a: 0, b: 1, width: 0.5}),
+    //         costWeight      : uniformDrift({a: 0, b: 5, width: 0.5}),
+    // 	    	failure         : uniformDrift({a: -10, b: 10, width: 1}),
+    //         questionCost    : 0
     // 	}
+
+    var params =
+	{
+            policyAlpha     : 4.00,
+            questionerAlpha : 3.73,
+            R1Alpha         : 8.870, 
+            relevanceBetaR1 : 0.96,
+            costWeight      : 0.96, 
+	    failure         : 3.40,
+            questionCost    : 0,
+	}
 
     var contextTarget = extend(
 	tsoContext,
@@ -106,7 +105,7 @@ var best_params = Infer({method: 'MCMC', burn: 100, samples: 5000, onlyMAP: true
     console.log(params)
     console.log('error:', mse)
     factor(mse)
-    return JSON.stringify(params)
+    return JSON.stringify(extend(params, {error: mse}))
 }})
 
 console.log(best_params)
