@@ -1,0 +1,74 @@
+var best_params = Infer({method: 'MCMC', burn: 100, samples: 5000, onlyMAP: true, model: function() {
+    var params =
+	{
+            policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.1}),
+            questionerAlpha : uniformDrift({a: 0, b: 10, width: 0.1}),
+            R1Alpha         : uniformDrift({a: 0, b: 50, width: 0.1}),
+            relevanceBetaR1 : uniformDrift({a: 0, b: 1, width: 0.1}),
+            costWeight      : uniformDrift({a: 0, b: 5, width: 0.1}),	
+	    	failure       : uniformDrift({a: -10, b: 10, width: 1}),	    
+            questionCost    : 0,
+	}
+
+    var contextLocal = extend(
+      tsosContext,
+      {decisionProblem : function(w, a) {
+        return _.includes(w, a) ?
+          (a == 'target' ? 94.62 :
+           a == 'competitor' ? 63.98 :
+           a == 'sameCat' ? 40.09 :
+           a == 'otherCat' ? 20.11 : 51.11) :
+          0.0000001;
+      }}
+    )
+
+    var question = contextLocal.questions[0];
+
+
+    // R1 knows full context model
+    var R1Prior = {
+      trueWorld: contextLocal,
+      distribution: Categorical({vs: ["trueWorld"]})
+    }
+
+    var R1Prediction = R1Averager(contextLocal, R1Prior, question, params)
+
+
+    var R1PredictionReduced = Infer({
+      method: 'enumerate'},
+      function() {
+        var response = sample(R1Prediction);
+        return response == 'no.---' ? 'taciturn' :
+            response == 'no.competitor' ? 'competitor' :
+            response == 'no.otherCat' ? 'otherCat' :
+            response == 'no.sameCat' ? 'sameCat' :
+            response == 'no.mostSimilar' ? 'mostSimilar' :
+            response == 'no.competitor+sameCat' ? 'sameCat' :
+            response == 'no.competitor+otherCat' ? 'otherCat' :
+            response == 'no.competitor+mostSimilar' ? 'mostSimilar' :
+            response == 'no.sameCat+mostSimilar' ? 'mostSimilar' :
+            response == 'no.sameCat+otherCat' ? 'otherCat' :
+            response == 'no.otherCat+mostSimilar' ? 'otherCat' :
+            response == 'no.competitor+sameCat+otherCat' ? 'otherCat' :
+            response == 'no.competitor+sameCat+mostSimilar' ? 'mostSimilar' :
+            response == 'no.competitor+otherCat+mostSimilar' ? 'otherCat' :
+            response == 'no.sameCat+otherCat+mostSimilar' ? 'otherCat' :
+            response == 'no.competitor+sameCat+otherCat+mostSimilar' ? 'exhaustive' : 'other'
+        condition(match)
+      })
+
+
+    terminalViz(R1PredictionReduced)
+    var taciturnError = Gaussian({mu: Math.log(0.078), sigma: .1}).score(R1PredictionReduced.score('taciturn'))
+    var competitorError = Gaussian({mu: Math.log(0.407), sigma: .1}).score(R1PredictionReduced.score('competitor'))
+    var sameCatError = Gaussian({mu: Math.log(0.039), sigma: .1}).score(R1PredictionReduced.score('sameCat'))
+	var otherCatError = Gaussian({mu: Math.log(0.025), sigma: .1}).score(R1PredictionReduced.score('otherCat'))
+	var mostSimilarError = Gaussian({mu: Math.log(0.254), sigma: .1}).score(R1PredictionReduced.score('mostSimilar'))
+    var mse = taciturnError + competitorError + sameCatError + mostSimilarError
+    console.log(params)
+    console.log('error:', mse)
+    factor(mse)
+    return JSON.stringify(params)
+}})
+
+console.log(best_params)

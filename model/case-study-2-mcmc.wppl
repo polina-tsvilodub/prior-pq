@@ -1,12 +1,12 @@
-Infer({method: 'MCMC', burn: 100, samples: 1000, onlyMAP: true, model: function() {
+var best_params = Infer({method: 'MCMC', burn: 100, samples: 5000, onlyMAP: true, model: function() {
     var params =
 	{
             policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.5}),
-            questionerAlpha : uniformDrift({a: 1, b: 10, width: 0.5}),
+            questionerAlpha : uniformDrift({a: 0, b: 10, width: 0.5}),
             R1Alpha         : uniformDrift({a: 0, b: 50, width: 0.5}),
             relevanceBetaR1 : uniformDrift({a: 0, b: 1, width: 0.5}),
             costWeight      : uniformDrift({a: 0, b: 5, width: 0.5}),
-	    failure         : uniformDrift({a: -10, b: 10, width: 1}),
+	    	failure         : uniformDrift({a: -10, b: 10, width: 1}),
             questionCost    : 0
 	}
 
@@ -108,3 +108,5 @@ Infer({method: 'MCMC', burn: 100, samples: 1000, onlyMAP: true, model: function(
     factor(mse)
     return JSON.stringify(params)
 }})
+
+console.log(best_params)
