@@ -20,9 +20,10 @@ library(philentropy)
 We calculate the Jensen-Shannon divergence as a measure of closeness of model predictions to human data. The divergences are calculated between proportions of answer types excluding the other_response and alternative categories.
 
 ```{r, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+answerOrder <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive')
 
 ## case study 2 ##
-df_human <- read_csv("../data/human/case_study_2/e2_free_production_human_categorized.csv") %>%
+df_human_cs2 <- read_csv("../data/human/case_study_2/e2_free_production_human_categorized.csv") %>%
   select(itemName, answer, response_option, option_category, category) %>%
   filter((category != "other_response") & (category != "alternative")) %>%
   mutate(answerType = factor(category, 
@@ -41,10 +42,20 @@ df_llms <- read_csv("../data/llms/case_study_2/e2_llms_results_annotated.csv") %
                            model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
                            TRUE ~ model))
 
-## TODO: read RSA data here 
+model_preds_2 <- read_csv("../data/priorpq/case_study_2/c2_model_preds_full.csv") %>%
+  mutate(model = "PRIOR-PQ") %>%
+  dplyr::mutate(
+    answerType = dplyr::case_when(
+      support == "taciturn" ~ 'taciturn',
+      support == "competitor" ~ 'competitor',
+      support == "sameCat" ~ 'same category',
+      support == "otherCat" ~ 'other category',
+      support == "exhaustive" ~ 'exhaustive',
+      .default = "other response"
+    ) %>% factor(levels = answerOrder))
 
 df_cs2_combined <- rbind(
-  df_human,
+  df_human_cs2,
   df_llms
 )
 
@@ -74,7 +85,18 @@ df_llms_cs3 <- read_csv("../data/llms/case_study_3/e3_llms_results_annotated.csv
                            model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
                            TRUE ~ model))
 
-## TODO: read RSA data here 
+model_preds_3 <- read_csv("../data/priorpq/case_study_3/c3_model_preds_full.csv") %>%
+  mutate(model = "PRIOR-PQ") %>%
+  dplyr::mutate(
+    answerType = dplyr::case_when(
+      support == "taciturn" ~ 'taciturn',
+      support == "competitor" ~ 'competitor',
+      support == "sameCat" ~ 'same category',
+      support == "otherCat" ~ 'other category',
+      support == "mostSimilar" ~ 'most similar',
+      support == "exhaustive" ~ 'exhaustive',
+      .default = "other response"
+    ) %>% factor(levels = answerOrder))
 
 df_cs3_combined <- rbind(
   df_human_cs3 %>% mutate(model = "Humans", prompt = "human"),
@@ -85,7 +107,7 @@ df_cs3_combined <- rbind(
 
 ## Case study 2
 
-We calculate the JSD between the proportions of different response categories in human data and data of all models for case study 2.
+We calculate the JSD between the proportions of different response categories in human data and data of all LLMs for case study 2.
 
 ```{r}
 cs2_models_summary <- df_cs2_combined %>% 
@@ -113,6 +135,68 @@ cs2_humans_summary <- df_cs2_combined %>%
 
 jsd_cs2 <- map_dfc(cs2_models_summary %>% select(-answerType), 
                    ~ philentropy::JSD(rbind(.x, cs2_humans_summary$prop)))
+```
+
+We calculate the JSD between our model (PRIOR-PQ) and human data.
+
+```{r JSDs-2}
+scenarios_2 <- unique(df_human_cs2$itemName)
+
+empirical_2_summary <- df_human_cs2 %>%
+  filter(answerType != "other response") %>%
+  rename(scenario = itemName) %>%
+  group_by(scenario, answerType) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  group_by(scenario) %>%
+  mutate(human_prop = n/sum(n)) %>%
+  select(-n)
+
+scenarios_2_rep <- data.frame(scenario = rep_len(scenarios_2, 1000))
+scrambled_scenarios_2 <- data.frame(scenario = scenarios_2_rep$scenario, 
+                                    scrambled_scenario = sample(scenarios_2_rep$scenario)) %>%
+  mutate(run = 1:n())
+
+model_2 <- model_preds_2 %>%
+  select(scenario, answerType, prob) %>%
+  filter(answerType != "other response",
+         answerType != "unclassified") %>%
+  filter(!is.na(answerType)) %>%
+  group_by(scenario, answerType) %>%
+  summarise(prob = sum(prob)) %>%
+  ungroup() %>%
+  group_by(scenario) %>%
+  mutate(prob = prob/sum(prob)) %>%
+  ungroup() %>%
+  complete(answerType, nesting(scenario)) 
+
+model_human_2 <- scrambled_scenarios_2 %>%
+  left_join(model_2, by = c("scenario")) %>%
+  left_join(empirical_2_summary, by = c("scenario", "answerType")) %>%
+  left_join(empirical_2_summary %>% rename(human_prop_scrambled = human_prop), 
+            by = c("scrambled_scenario" = "scenario", "answerType")) %>%
+  replace_na(list(human_prop = 0, human_prop_scrambled = 0, prob = 0)) 
+
+# check if all sum to 1
+model_human_2 %>%
+  group_by(scenario, scrambled_scenario, run) %>%
+  summarise(sum_model = sum(prob),
+            sum_human = sum(human_prop),
+            sum_scrambled = sum(human_prop_scrambled))
+
+JSD_2 <- model_human_2 %>%
+  group_by(scenario, scrambled_scenario, run) %>%
+  mutate(JSD = JSD(rbind(prob, human_prop)),
+         JSD_scrambled = JSD(rbind(prob, human_prop_scrambled))) %>%
+  ungroup() 
+
+mean_JSD_2_human_model <- JSD_2 %>%
+  summarise(mean(JSD))
+
+mean_JSD_2_human_scrambled_model <- JSD_2 %>%
+  summarise(mean(JSD_scrambled))
+
+t.test(JSD_2$JSD, JSD_2$JSD_scrambled)
 ```
 
 ## Case study 3
