@@ -107,7 +107,6 @@ df_rsa_main_summary <- read_csv("../data/priorpq/case_study_2/c2_model_preds.csv
   rename(answerType_proportion = prob) %>%
   select(prompt, model, answerType, answerType_proportion)
 
-# TODO: add RSA responses
 ```
 
 ```{r}
@@ -267,4 +266,12 @@ df_combined_summary %>%
   ggtitle("Do you have iced tea?")
 
 #ggsave("figs/cs2_response-props_apprndix.png", width=15, height=7)
+```
+
+
+
+```{r appendix-by-item}
+
+
+
 ```

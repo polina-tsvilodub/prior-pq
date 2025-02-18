@@ -404,6 +404,15 @@ all_models_human_3 <- model_3 %>%
                   zero_shot_mixtral_instruct = 0)) 
 
 model_human_JSDs_3 <- all_models_human_3 %>%
+  group_by(itemName) %>%
+  summarise(JSD_human_RSA = JSD(rbind(human_prop, model_prob)),
+            JSD_human_one_shot = JSD(rbind(human_prop, one_shot_cot_mixtral_instruct)),
+            JSD_human_zero_shot = JSD(rbind(human_prop, zero_shot_mixtral_instruct)))
+
+t.test(model_human_JSDs_3$JSD_human_RSA, model_human_JSDs_3$JSD_human_one_shot)
+t.test(model_human_JSDs_3$JSD_human_RSA, model_human_JSDs_3$JSD_human_zero_shot)
+
+overall_JSDs_3 <- all_models_human_3 %>%
   pivot_longer(c('model_prob','human_prop','one_shot_cot_mixtral_instruct',
                  'zero_shot_mixtral_instruct'), names_to = 'agent',
                values_to = 'prop') %>%
