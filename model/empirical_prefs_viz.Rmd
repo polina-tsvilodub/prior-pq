@@ -11,6 +11,7 @@ library(aida)    # remotes::install_github("michael-franke/aida-package")
 library(readr)
 library(furrr)
 library(here)
+library(philentropy)
 
 
 # use the aida-theme for plotting
@@ -142,17 +143,13 @@ model_preds_2_summary <- model_preds_2 %>%
   dplyr::select(-Parameter) %>%
   dplyr::mutate(
     answerType = dplyr::case_when(
-      support == "no.---" ~ 'taciturn',
-      support == "no.competitor" ~ 'competitor',
-      support == "no.competitor+sameCat" ~ 'same category',
-      support == "no.sameCat" ~ 'same category',
-      support == "no.competitor+otherCat" ~ 'other category',
-      support == "no.otherCat" ~ 'other category',
-      support == "no.sameCat+otherCat" ~ 'other category',
-      support == "no.competitor+sameCat+otherCat" ~ 'exhaustive',
+      support == "taciturn" ~ 'taciturn',
+      support == "competitor" ~ 'competitor',
+      support == "sameCat" ~ 'same category',
+      support == "otherCat" ~ 'other category',
+      support == "exhaustive" ~ 'exhaustive',
       .default = "other response"
-    ) %>% factor(levels = answerOrder)
-  ) 
+    ) %>% factor(levels = answerOrder))
 
 model_preds_3_summary <- model_preds_3 %>% 
   filter(scenario %in% scenarios_3) %>%
@@ -477,17 +474,13 @@ model_2 <- model_preds_2 %>%
   select(scenario, support, prob) %>%
   dplyr::mutate(
     answerType = dplyr::case_when(
-      support == "no.---" ~ 'taciturn',
-      support == "no.competitor" ~ 'competitor',
-      support == "no.competitor+sameCat" ~ 'same category',
-      support == "no.sameCat" ~ 'same category',
-      support == "no.competitor+otherCat" ~ 'other response',
-      support == "no.otherCat" ~ 'other category',
-      support == "no.sameCat+otherCat" ~ 'other response',
-      support == "no.competitor+sameCat+otherCat" ~ 'exhaustive',
+      support == "taciturn" ~ 'taciturn',
+      support == "competitor" ~ 'competitor',
+      support == "sameCat" ~ 'same category',
+      support == "otherCat" ~ 'other category',
+      support == "exhaustive" ~ 'exhaustive',
       .default = "other response"
-    ) %>% factor(levels = answerOrder)
-  ) %>%
+    ) %>% factor(levels = answerOrder)) %>%
   filter(answerType != "other response",
          answerType != "unclassified") %>%
   filter(!is.na(answerType)) %>%

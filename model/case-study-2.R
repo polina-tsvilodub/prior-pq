@@ -99,15 +99,12 @@ priorSampleParams <- function() {
   return(params)
 }
 
-empiricalPrior <- function() {
+empiricalPrior <- function(scenario) {
   these_priors <- full_matrix %>% 
     mutate(targetOption = fct_relevel(targetOption, 'itemQuestion', 'competitor', 'sameCategory', 'otherCategory')) %>%
-    # filter(itemName == scenario) %>%
+    filter(itemName == scenario) %>%
     group_by(targetOption) %>%
-    summarise(itemQuestion = mean(itemQuestion)/10,
-              competitor = mean(competitor)/10,
-              sameCategory = mean(sameCategory)/10,
-              otherCategory = mean(otherCategory)/10)
+    sample_n(1)
     
   utils <- tibble(
     'utilTarget'       = these_priors$itemQuestion,
@@ -119,9 +116,9 @@ empiricalPrior <- function() {
 }
 
 # run samples in parallel 
-# samples_each = 10
-# scenarios_rep = rep(scenarios, samples_each)
-n_samples = 1 # length(scenarios_rep)
+samples_each = 20
+scenarios_rep = rep(scenarios, samples_each)
+n_samples = length(scenarios_rep)
 
 plan(multisession, workers = 8)
 
@@ -137,13 +134,13 @@ priorPred <- furrr::future_map_dfr(1:n_samples, function(i) {
     scenario <- param_space[i,]['scenarios'] %>% pull()
     params <- param_space[i,] %>% select(-scenarios, -n_sample) %>% tibble()
   } else {
-    # scenario = scenarios_rep[i]
+    scenario = scenarios_rep[i]
     params <- priorSampleParams()
   }
-  utils  <- empiricalPrior()
+  utils  <- empiricalPrior(scenario)
   out    <- tibble('run' = i) %>%
     cbind(params) %>%
-    # cbind(scenario) %>%
+    cbind(scenario) %>%
     cbind(run_model_tso(params, utils))
     return (out)
 }, .progress = TRUE, .options = furrr_options(seed = 123))
@@ -152,6 +149,6 @@ priorPred <- furrr::future_map_dfr(1:n_samples, function(i) {
 if (param_search == TRUE) {
   write_csv(priorPred, here('data/priorpq/case_study_2/c2_parameter_search.csv'))
 } else {
-  write_csv(priorPred, here('data/priorpq/case_study_2/c2_model_preds.csv'))
+  write_csv(priorPred, here('data/priorpq/case_study_2/c2_model_preds_full.csv'))
 }
 

@@ -87,15 +87,11 @@ priorSampleParams <- function() {
 }
 
 
-empiricalPrior <- function() {
+empiricalPrior <- function(scenario) {
   these_priors <- full_matrix %>% 
-    # filter(itemName == scenario) %>%
-    # group_by(targetOption) %>%
-    summarise(itemQuestion = mean(itemQuestion)/10,
-              competitor = mean(competitor)/10,
-              sameCategory = mean(sameCategory)/10,
-              mostSimilar = mean(mostSimilar)/10,
-              otherCategory = mean(otherCategory)/10)
+    filter(itemName == scenario) %>%
+    group_by(targetOption) %>%
+    sample_n(1)
   
   utils <- tibble(
     'utilTarget'       = these_priors$itemQuestion,
@@ -108,9 +104,9 @@ empiricalPrior <- function() {
 }
 
 # run samples in parallel 
-# samples_each = 1
-# scenarios_rep = rep(scenarios, samples_each)
-n_samples = 1 # length(scenarios_rep)
+samples_each = 20
+scenarios_rep = rep(scenarios, samples_each)
+n_samples = length(scenarios_rep)
 
 
 param_search = FALSE
@@ -129,7 +125,7 @@ priorPred <- furrr::future_map_dfr(1:n_samples, function(i) {
     scenario = scenarios_rep[i]
     params <- priorSampleParams()
   }
-  utils  <- empiricalPrior()
+  utils  <- empiricalPrior(scenario)
   out    <- tibble('run' = i) %>%
     cbind(params) %>%
     cbind(scenario) %>%
@@ -140,6 +136,6 @@ priorPred <- furrr::future_map_dfr(1:n_samples, function(i) {
 if (param_search == TRUE) {
   write_csv(priorPred, here('data/priorpq/case_study_3/c3_parameter_search.csv'))
 } else {
-  write_csv(priorPred, here('data/priorpq/case_study_3/c3_model_preds.csv'))
+  write_csv(priorPred, here('data/priorpq/case_study_3/c3_model_preds_full.csv'))
 }
 
