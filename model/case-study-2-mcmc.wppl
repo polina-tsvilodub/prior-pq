@@ -47,6 +47,7 @@ var best_params = Infer({method: 'MCMC', samples: 5000, onlyMAP: true, model: fu
 	 }}
     )
 
+
     var contextOtherCat = extend(
 	tsoContext,
 	{name: 'otherCat',
@@ -90,7 +91,7 @@ var best_params = Infer({method: 'MCMC', samples: 5000, onlyMAP: true, model: fu
     var sameCatError = Gaussian({mu: Math.log(0.168), sigma: .1}).score(R1PredictionReduced.score('sameCat'))
     var exhaustiveError = Gaussian({mu: Math.log(0.101), sigma: .1}).score(R1PredictionReduced.score('exhaustive'))
     var otherCatError = Gaussian({mu: Math.log(0.014), sigma: .1}).score(R1PredictionReduced.score('otherCat')) 
-    var mse = taciturnError + competitorError + sameCatError + otherCatError // exhaustiveError 
+    var mse = taciturnError + competitorError + sameCatError + otherCatError 
     console.log(params)
     console.log('error:', mse)
     factor(mse)

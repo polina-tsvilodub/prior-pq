@@ -56,20 +56,6 @@ full_matrix %>%
 
 #################################################
 
-# 
-# policyAlpha = c(1,5,9)
-# questionerAlpha = c(1,5,9)
-# R1Alpha = c(1,5,9)
-# relevanceBetaR0 = c(0)
-# relevanceBetaR1 = c(0.1, 0.5, 0.9)
-# costWeight = c(0.1, 0.5, 0.9)
-# n_sample <- c(1)
-# questionCost <- c(0)
-# 
-# param_space <- expand_grid(policyAlpha, questionerAlpha, R1Alpha, relevanceBetaR0, relevanceBetaR1, costWeight, questionCost, scenarios, n_sample)
-
-##############################################
-
 run_model_tso <- function (params, utils) {
   webPPL_data <- tibble('task' = "TSO") %>% 
     cbind(params) %>% 
@@ -90,7 +76,6 @@ priorSampleParams <- function() {
     'policyAlpha'      = runif(1,min = 4.00, max = 4.00), # searched 0-10
     'questionerAlpha'  = runif(1,min = 3.73, max = 3.73), # searched 0-10
     'R1Alpha'          = runif(1,min = 8.870, max = 8.870), # searched 0-50
-    'relevanceBetaR0'  = runif(1,min = 0, max = 0), # fixed at 0
     'relevanceBetaR1'  = runif(1,min = 0.96, max = 0.96), # searched 0-1
     'costWeight'       = runif(1,min = 0.96, max = 0.96), # searched 0-5
     'failure'          = runif(1,min = 3.40, max = 3.40), # searched -10 to 10
@@ -122,21 +107,11 @@ n_samples = length(scenarios_rep)
 
 plan(multisession, workers = 8)
 
-param_search = FALSE
-
-if (param_search == TRUE) {
-  n_samples = nrow(param_space)
-}
 
 priorPred <- furrr::future_map_dfr(1:n_samples, function(i) {
   message('run ', i)
-  if (param_search == TRUE) {
-    scenario <- param_space[i,]['scenarios'] %>% pull()
-    params <- param_space[i,] %>% select(-scenarios, -n_sample) %>% tibble()
-  } else {
-    scenario = scenarios_rep[i]
-    params <- priorSampleParams()
-  }
+  scenario = scenarios_rep[i]
+  params <- priorSampleParams()
   utils  <- empiricalPrior(scenario)
   out    <- tibble('run' = i) %>%
     cbind(params) %>%
@@ -146,9 +121,5 @@ priorPred <- furrr::future_map_dfr(1:n_samples, function(i) {
 }, .progress = TRUE, .options = furrr_options(seed = 123))
 
 
-if (param_search == TRUE) {
-  write_csv(priorPred, here('data/priorpq/case_study_2/c2_parameter_search.csv'))
-} else {
-  write_csv(priorPred, here('data/priorpq/case_study_2/c2_model_preds_full.csv'))
-}
+write_csv(priorPred, here('data/priorpq/case_study_2/c2_model_preds_full.csv'))
 
