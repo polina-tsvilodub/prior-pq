@@ -98,19 +98,6 @@ var updateBeliefsLiteral = cache(function(beliefs, question, response, context) 
   });
 });
 
-// var R1 = cache(function(question, context, params) {
-//   var getLicensedResponsesR1 = context.getLicensedResponsesR1;
-//   var responses = filter(function(r) {!isContradiction(context, question, r)},
-//                          getLicensedResponsesR1(question));
-//   return Infer({method: 'enumerate'}, function(){
-//     var response = uniformDraw(responses);
-//     var ownBeliefs = context.R1PriorOverWorlds;
-//     var otherBeliefs = updateBeliefsLiteral(context.questionerBeliefs, question, response, context);
-//     factor(10 * (-KL(ownBeliefs, otherBeliefs)));
-//     return response;
-//   });
-// }, 1000);
-
 var R0_fullResponses = cache(function(question, context, params) {
   var getLicensedResponsesR1 = context.getLicensedResponsesR1;
   var meaning = context.meaning;
