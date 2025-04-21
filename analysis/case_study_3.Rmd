@@ -53,6 +53,7 @@ answerOrder <- c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'mos
 answerLabels <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive', 'undefined responses', 'alternative')
 optionOrder <- c("competitor_c1", "competitor_c2", "mostSimilar", "otherCategory")
 modelAnswerOrder <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive')
+contexts <- df_human %>% group_by(itemName, settingName, context_nr) %>% tally() %>% select(-n)
 cbp1 <- c("#E69F00", "#56B4E9", "#009E73",
           "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#999999")
 
@@ -78,8 +79,12 @@ df_llms <- read_csv("../data/llms/case_study_3/e3_llms_results_annotated.csv") %
                            model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
                            TRUE ~ model))
 
-model_preds_3 <- read_csv("../data/priorpq/case_study_3/c3_model_preds_full.csv") %>%
+df_priorpq <- read_csv("../data/priorpq/case_study_3/c3_model_preds_full.csv") %>%
   mutate(model = "PRIOR-PQ") %>%
+  select(-policyAlpha, -questionerAlpha, -R1Alpha, -relevanceBetaR0,
+         -relevanceBetaR1, -costWeight, -failure, -questionCost) %>%
+  rename(itemName = scenario, mentioned_option_proportion = prob) %>%
+  left_join(contexts) %>%
   dplyr::mutate(
     answerType = dplyr::case_when(
       support == "taciturn" ~ 'taciturn',
@@ -90,22 +95,29 @@ model_preds_3 <- read_csv("../data/priorpq/case_study_3/c3_model_preds_full.csv"
       support == "exhaustive" ~ 'exhaustive',
       .default = "other response"
     ) %>% factor(levels = modelAnswerOrder)) %>%
-  select(-policyAlpha, -questionerAlpha, -R1Alpha, -relevanceBetaR0,
-         -relevanceBetaR1, -costWeight, -failure, -questionCost) %>%
-  rename(itemName = scenario) %>%
-  select(-support)
+  dplyr::mutate(
+    option_category = dplyr::case_when(
+      answerType == 'competitor' & context_nr == 'context1' ~ 'competitor_c1',
+      answerType == 'competitor' & context_nr == 'context2' ~ 'competitor_c2',
+      answerType == 'same category' & context_nr == 'context1' ~ 'competitor_c2',
+      answerType == 'same category' & context_nr == 'context2' ~ 'competitor_c1',
+      .default = answerType
+    )
+  ) %>%
+  mutate(prompt = 'priorPQ') %>%
+  select(-support, -run) 
 
-df_combined <- rbind(
+df_combined <- bind_rows(
   df_human %>% mutate(model = "Humans", prompt = "human"),
   df_llms %>% select(-global_category)
 ) %>% filter(!is.na(answerType))
 ```
 
 ### Main analyses
+
 ```{r}
 df_combined_exploded <- df_combined %>% filter(category != "alternative") %>%
   filter(category != "other_response") %>%
-  # remove white spaces and split the annotations of mentioned option types
   mutate(option_category = gsub(" ", "", option_category)) %>%
   separate_rows(option_category, sep=",")
  
@@ -127,22 +139,24 @@ df_combined_exploded_summary <- df_combined_exploded %>%
   mutate(ci_lower = ifelse(ci_lower < 0, 0, ci_lower)) %>%
   unique()
   
+
+  
 df_combined_exploded_summary %>%
-  filter((prompt == "human") | ((prompt %in% c("one-shot CoT", "zero-shot") ) & (model == "Mixtral-Inst.")  )) %>%
+  bind_rows(df_priorpq %>% group_by(context_nr, option_category, prompt, model) %>% tidyboot_mean(mentioned_option_proportion) %>% rename(mentioned_option_proportion = empirical_stat)) %>%
+  filter((prompt == "human") | (prompt == "priorPQ") | ((prompt %in% c("one-shot CoT", "zero-shot") ) & (model == "Mixtral-Inst.")  )) %>%
   filter((option_category =="competitor_c1") | (option_category =="competitor_c2")) %>%
   mutate(model_prompt = str_c(model, prompt, sep="\n"),
          model_prompt = ifelse(model_prompt == "human\nhuman", "Humans", model_prompt),
          `Mentioned option` = option_category) %>%
   ggplot(., aes(x = context_nr, y = mentioned_option_proportion, fill = `Mentioned option`)) +
-  geom_col(position = position_dodge()) +
-  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0, position = position_dodge(width = 0.9)) +
-  scale_fill_manual(values = cbp1) +
-  facet_grid(. ~ model_prompt) +
-  
-  xlab("") +
-  ylab("") +
-  theme(axis.text.x = element_text(angle = 45, hjust =1)) +
-  theme_few()
+    geom_col(position = position_dodge()) +
+    geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0, position = position_dodge(width = 0.9)) +
+    scale_fill_manual(values = cbp1) +
+    facet_grid(. ~ model_prompt) +
+    xlab("") +
+    ylab("") +
+    theme(axis.text.x = element_text(angle = 45, hjust =1)) +
+    theme_few()
 
 ggsave("figs/Fig3B.pdf", width=10, height=5)
 ```
