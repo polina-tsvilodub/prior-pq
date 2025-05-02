@@ -14,6 +14,16 @@ library(tidyverse)
 library(tidyboot)
 library(brms)
 library(tidybayes)
+
+project_colors = c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#000000")
+
+# setting theme colors globally
+scale_colour_discrete <- function(...) {
+  scale_colour_manual(..., values = project_colors)
+}
+scale_fill_discrete <- function(...) {
+  scale_fill_manual(..., values = project_colors)
+} 
 ```
 
 ```{r, include=FALSE}
@@ -45,7 +55,7 @@ This script analyses manually annotated data, post exclusion of human participan
 Alternative and other_response answers are excluded from main analyses.
 
 ```{r, include=FALSE, warning=FALSE, message=FALSE}
-answerOrder <- c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList', 'other_response',  'alternative')
+answerOrder <- c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive')
 answerLabels <- c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive', 'undefined responses', 'alternative')
 
 df_human <- read_csv("../data/human/case_study_2/e2_free_production_human_categorized.csv") %>%
@@ -63,7 +73,21 @@ df_llms <- read_csv("../data/llms/case_study_2/e2_llms_results_annotated.csv") %
                            model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
                            TRUE ~ model))
 
-## TODO: read RSA data here 
+model_preds_2 <- read_csv("../data/priorpq/case_study_2/c2_model_preds_full.csv") %>%
+  mutate(model = "PRIOR-PQ") %>%
+  dplyr::mutate(
+    answerType = dplyr::case_when(
+      support == "taciturn" ~ 'taciturn',
+      support == "competitor" ~ 'competitor',
+      support == "sameCat" ~ "same category",
+      support == "otherCat" ~ "other category",
+      support == "exhaustive" ~ 'exhaustive',
+      .default = "other response"
+    ) %>% factor(levels = answerOrder)) %>%
+  select(-policyAlpha, -questionerAlpha, -R1Alpha, -relevanceBetaR0,
+         -relevanceBetaR1, -costWeight, -failure, -questionCost, -run) %>%
+  rename(itemName = scenario) %>%
+  select(-support)
 
 df_combined <- rbind(
   df_human,
@@ -78,6 +102,7 @@ Below, plots are created. We plot the proportions of each response category for 
 # human responses
 df_human_main <- df_human %>%
   filter((answerType != "alternative") & (answerType != "undefined responses"))
+
 df_llms_main <- df_llms %>% 
   filter((answerType != "alternative") & (answerType != "undefined responses"))
 
@@ -98,7 +123,14 @@ df_llms_main_summary <- df_llms_main  %>%
             answerType_proportion = answerType_count / model_prompt_count
             )  %>% unique()
 
-# TODO: add RSA responses
+df_rsa_main_summary <- read_csv("../data/priorpq/case_study_2/c2_model_preds.csv") %>%
+  mutate(model = 'prior-pq',
+         prompt = 'prior-pq') %>%
+  mutate(answerType = factor(support,  levels = c('taciturn', 'competitor', 'sameCat', 'otherCat', 'exhaustive'), 
+                                       labels = c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive'))) %>%
+  rename(answerType_proportion = prob) %>%
+  select(prompt, model, answerType, answerType_proportion)
+
 ```
 
 ```{r}
@@ -107,21 +139,31 @@ cbp1 <- c("#E69F00", "#56B4E9", "#009E73",
 
 # plot LLM results 
 df_llms_main_summary %>% 
-  mutate(prompt = factor(prompt, levels = c("zero-shot", "one-shot Explanation", "one-shot QA", "one-shot CoT"), 
-                         labels = c("zero-shot\n(V)", "one-shot\nExplanation\n(I+II+IV+V)", "one-shot\nQA (I+III+IV+V)", "one-shot\nCoT (I-V)")),
-    model = factor(model, levels = c("Humans", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst."))) %>%
+  mutate(prompt = factor(prompt, 
+                         levels = c("prior-pq", "zero-shot", "one-shot Explanation", "one-shot QA", "one-shot CoT"), 
+                         labels = c("prior-pq", "zero-shot\n(V)", "one-shot\nExplanation\n(I+II+IV+V)", 
+                                    "one-shot\nQA (I+III+IV+V)", "one-shot\nCoT (I-V)")),
+       model = factor(model, levels = c("Humans", "prior-pq", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst."))) %>%
   filter((prompt %in% c("one-shot\nCoT (I-V)", "zero-shot\n(V)") ) & (model == "Llama-3-70B-Inst.")) %>%
   ggplot(., aes(x = prompt, y = answerType_proportion, fill = answerType)) +
-  geom_col(color = "#575463", width = 0.9)+ 
-  geom_col(data = df_human_main_summary, aes(x = prompt, y = answerType_proportion, fill = answerType), width = 0.9, color = "#575463") +
-  scale_fill_manual(values = cbp1) +
-  scale_y_continuous( breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)) +
-   theme(plot.title = element_text(hjust = 0.5),  legend.title = element_text(size=12), legend.text = element_text(size=12), axis.ticks.x = element_blank(), axis.text.x = element_text(angle = 45, margin = margin(t = 10), size = 12)) +
-  ylab("") +
-  xlab("") +
-  facet_grid(.~model, scales = "free_x", space = "free_x") +
-  ggtitle("Do you have iced tea?")
+    geom_col(color = "#575463", width = 0.9)+ 
+    geom_col(data = df_rsa_main_summary, aes(x = prompt, y = answerType_proportion, fill = answerType), 
+             width = 0.9, color = "#575463") +
+    geom_col(data = df_human_main_summary, aes(x = prompt, y = answerType_proportion, fill = answerType), 
+             width = 0.9, color = "#575463") +
+    scale_fill_manual(values = cbp1) +
+    scale_y_continuous( breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1)) +
+    theme(plot.title = element_text(hjust = 0.5),  
+          legend.title = element_text(size=12), 
+          legend.text = element_text(size=12), 
+          axis.ticks.x = element_blank(), 
+          axis.text.x = element_text(angle = 45, margin = margin(t = 10), size = 12)) +
+    ylab("") +
+    xlab("") +
+    facet_grid(.~model, scales = "free_x", space = "free_x") +
+    ggtitle("Do you have iced tea?")
 
+ggsave("figs/Fig3A.pdf", width=8, height=5)
 ```
 
 Below some exploratory statistical analyses on human data are computed. The analyses investigate whether: 
@@ -248,4 +290,100 @@ df_combined_summary %>%
   ggtitle("Do you have iced tea?")
 
 #ggsave("figs/cs2_response-props_apprndix.png", width=15, height=7)
+```
+
+
+
+```{r appendix-by-item}
+scenarios_2 <- unique(df_human$itemName)
+
+llm_2_props <- df_llms %>%
+  filter(itemName %in% scenarios_2) %>%
+  mutate(model = paste(prompt, model, sep = "_")) %>%
+  filter(answerType != "alternative",
+         answerType != "undefined responses") %>%
+  group_by(model, itemName, answerType) %>%
+  count() %>%
+  ungroup() %>%
+  group_by(model, itemName) %>%
+  mutate(model_prop = n/sum(n)) %>%
+  select(-n) %>%
+  ungroup() %>%
+  pivot_wider(names_from = model, values_from = model_prop) %>%
+  rename(one_shot_cot_llama_instruct = `one-shot CoT_Llama-3-70B-Inst.`,
+         zero_shot_llama_instruct = `zero-shot_Llama-3-70B-Inst.`) %>%
+  select(itemName, answerType, one_shot_cot_llama_instruct, zero_shot_llama_instruct) %>%
+  replace_na(list(one_shot_cot_llama_instruct = 0, zero_shot_llama_instruct = 0))
+
+model_2 <- model_preds_2 %>%
+  filter(answerType != "alternative",
+         answerType != "undefined responses") %>%
+  select(itemName, answerType, prob) %>%
+  filter(answerType != "other response",
+         answerType != "unclassified") %>%
+  filter(!is.na(answerType)) %>%
+  group_by(itemName, answerType) %>%
+  summarise(prob = sum(prob)) %>%
+  ungroup() %>%
+  group_by(itemName) %>%
+  mutate(prob = prob/sum(prob)) %>%
+  ungroup() %>%
+  complete(answerType, nesting(itemName)) 
+
+all_models_human_2 <- model_2 %>%
+  rename(model_prob = prob) %>%
+  complete(itemName, nesting(answerType)) %>%
+  left_join(df_human %>% 
+              filter(answerType != "alternative",
+              answerType != "undefined responses") %>%
+              group_by(itemName, answerType) %>%
+              count() %>%
+              ungroup() %>%
+              group_by(itemName) %>%
+              mutate(human_prop = n/sum(n)) %>%
+              select(-n), 
+            by = c("itemName", "answerType")) %>%
+  left_join(llm_2_props, by = c("itemName", "answerType")) %>%
+  replace_na(list(human_prop = 0, model_prob = 0,
+                  one_shot_cot_llama_instruct = 0,
+                  zero_shot_llama_instruct = 0)) 
+
+by_item_plot <- all_models_human_2 %>%
+  pivot_longer(c('human_prop','model_prob',
+                 'one_shot_cot_llama_instruct',
+                 'zero_shot_llama_instruct'),
+               names_to = 'model',
+               values_to = 'prop') %>%
+  mutate(model = case_when(model == "human_prop" ~ "Human",
+                           model == "model_prob" ~ "PRIOR-PQ",
+                           model == 'one_shot_cot_llama_instruct' ~
+                             "One-shot CoT Llama",
+                           model == 'zero_shot_llama_instruct' ~
+                             "Zero-shot Llama"),
+         model = factor(model,
+                        levels = c("Human", "PRIOR-PQ",
+                                  "Zero-shot Llama",
+                                  "One-shot CoT Llama"),
+                        labels = c("Human", "PRIOR-PQ",
+                                   "Zero-shot\nLlama",
+                                   "One-shot CoT\nLlama"))) %>%
+  ggplot(aes(x = model, y = prop, fill = answerType)) +
+  geom_bar(position="stack", stat="identity") +
+  scale_x_discrete(drop = TRUE) +
+  facet_wrap(~itemName, scales = "free") +
+  ylab("Proportion of answer") +
+  xlab("") +
+  theme(axis.text.x = element_text(angle 
+                                   = 45, vjust = 1, hjust=1,
+                                   size=10),
+        panel.background = element_blank(),
+        panel.grid.minor = element_blank(), panel.grid.major = element_blank(),
+        legend.title=element_blank(),
+        legend.text=element_text(size=10),
+        strip.background = element_blank(),
+        axis.text.y=element_blank(),
+  strip.text.x = element_blank()) + 
+  scale_fill_discrete()
+
+ggsave('figs/cs2_appendix_item_plot.png', by_item_plot, width = 10, height = 9)
 ```

@@ -10,7 +10,6 @@ library(tidyverse)
 library(tidyboot)
 library(brms)
 library(tidybayes)
-library(ggpattern)
 library(philentropy)
 ```
 
@@ -20,9 +19,11 @@ library(philentropy)
 We calculate the Jensen-Shannon divergence as a measure of closeness of model predictions to human data. The divergences are calculated between proportions of answer types excluding the other_response and alternative categories.
 
 ```{r, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE}
+answerOrder <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive')
+answerLabels <- c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive', 'undefined responses', 'alternative')
 
 ## case study 2 ##
-df_human <- read_csv("../data/human/case_study_2/e2_free_production_human_categorized.csv") %>%
+df_human_cs2 <- read_csv("../data/human/case_study_2/e2_free_production_human_categorized.csv") %>%
   select(itemName, answer, response_option, option_category, category) %>%
   filter((category != "other_response") & (category != "alternative")) %>%
   mutate(answerType = factor(category, 
@@ -30,7 +31,7 @@ df_human <- read_csv("../data/human/case_study_2/e2_free_production_human_catego
                              labels = c('taciturn', 'competitor', 'same category', 'other category', 'exhaustive'))) %>%
   mutate(prompt = "human", model = "Humans")
 
-df_llms <- read_csv("../data/llms/case_study_2/e2_llms_results_annotated.csv") %>% 
+df_llms_cs2 <- read_csv("../data/llms/case_study_2/e2_llms_results_annotated.csv") %>% 
   filter((category != "other_response") & (category != "alternative")) %>%
   mutate(answerType = factor(category, 
                              levels = c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'fullList'), 
@@ -41,11 +42,23 @@ df_llms <- read_csv("../data/llms/case_study_2/e2_llms_results_annotated.csv") %
                            model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
                            TRUE ~ model))
 
-## TODO: read RSA data here 
+model_preds_2 <- read_csv("../data/priorpq/case_study_2/c2_model_preds_full.csv") %>%
+  mutate(model = "PRIOR-PQ") %>%
+  dplyr::mutate(
+    answerType = dplyr::case_when(
+      support == "taciturn" ~ 'taciturn',
+      support == "competitor" ~ 'competitor',
+      support == "sameCat" ~ 'same category',
+      support == "otherCat" ~ 'other category',
+      support == "exhaustive" ~ 'exhaustive',
+      .default = "other response"
+    ) %>% factor(levels = answerLabels)) %>%
+  select(-policyAlpha, -questionerAlpha, -R1Alpha, -relevanceBetaR0,
+         -relevanceBetaR1, -costWeight, -failure, -questionCost, -run) 
 
 df_cs2_combined <- rbind(
-  df_human,
-  df_llms
+  df_human_cs2,
+  df_llms_cs2
 )
 
 ## case study 3 ##
@@ -74,7 +87,20 @@ df_llms_cs3 <- read_csv("../data/llms/case_study_3/e3_llms_results_annotated.csv
                            model == "mistralai/Mixtral-8x7B-Instruct-v0.1" ~ "Mixtral-Inst.",
                            TRUE ~ model))
 
-## TODO: read RSA data here 
+model_preds_3 <- read_csv("../data/priorpq/case_study_3/c3_model_preds_full.csv") %>%
+  mutate(model = "PRIOR-PQ") %>%
+  dplyr::mutate(
+    answerType = dplyr::case_when(
+      support == "taciturn" ~ 'taciturn',
+      support == "competitor" ~ 'competitor',
+      support == "sameCat" ~ 'same category',
+      support == "otherCat" ~ 'other category',
+      support == "mostSimilar" ~ 'most similar',
+      support == "exhaustive" ~ 'exhaustive',
+      .default = "other response"
+    ) %>% factor(levels = answerOrder)) %>%
+  select(-policyAlpha, -questionerAlpha, -R1Alpha, -relevanceBetaR0,
+         -relevanceBetaR1, -costWeight, -failure, -questionCost)
 
 df_cs3_combined <- rbind(
   df_human_cs3 %>% mutate(model = "Humans", prompt = "human"),
@@ -85,7 +111,7 @@ df_cs3_combined <- rbind(
 
 ## Case study 2
 
-We calculate the JSD between the proportions of different response categories in human data and data of all models for case study 2.
+We calculate the JSD between the proportions of different response categories in human data and data of all LLMs for case study 2.
 
 ```{r}
 cs2_models_summary <- df_cs2_combined %>% 
@@ -114,6 +140,130 @@ cs2_humans_summary <- df_cs2_combined %>%
 jsd_cs2 <- map_dfc(cs2_models_summary %>% select(-answerType), 
                    ~ philentropy::JSD(rbind(.x, cs2_humans_summary$prop)))
 ```
+
+We calculate the itemwise JSDs between our model (PRIOR-PQ) and human data.
+
+```{r itemwise-JSDs-PRIORPQ-2}
+scenarios_2 <- unique(df_human_cs2$itemName)
+
+empirical_2_summary <- df_human_cs2 %>%
+  filter(answerType != "other response") %>%
+  rename(scenario = itemName) %>%
+  group_by(scenario, answerType) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  group_by(scenario) %>%
+  mutate(human_prop = n/sum(n)) %>%
+  select(-n)
+
+scenarios_2_rep <- data.frame(scenario = rep_len(scenarios_2, 1000))
+scrambled_scenarios_2 <- data.frame(scenario = scenarios_2_rep$scenario, 
+                                    scrambled_scenario = sample(scenarios_2_rep$scenario)) %>%
+  mutate(run = 1:n())
+
+model_2 <- model_preds_2 %>%
+  select(scenario, answerType, prob) %>%
+  filter(answerType != "other response",
+         answerType != "unclassified") %>%
+  filter(!is.na(answerType)) %>%
+  group_by(scenario, answerType) %>%
+  summarise(prob = sum(prob)) %>%
+  ungroup() %>%
+  group_by(scenario) %>%
+  mutate(prob = prob/sum(prob)) %>%
+  ungroup() %>%
+  complete(answerType, nesting(scenario)) 
+
+model_human_2 <- scrambled_scenarios_2 %>%
+  left_join(model_2, by = c("scenario")) %>%
+  left_join(empirical_2_summary, by = c("scenario", "answerType")) %>%
+  left_join(empirical_2_summary %>% rename(human_prop_scrambled = human_prop), 
+            by = c("scrambled_scenario" = "scenario", "answerType")) %>%
+  replace_na(list(human_prop = 0, human_prop_scrambled = 0, prob = 0)) 
+
+# check if all sum to 1
+model_human_2 %>%
+  group_by(scenario, scrambled_scenario, run) %>%
+  summarise(sum_model = sum(prob),
+            sum_human = sum(human_prop),
+            sum_scrambled = sum(human_prop_scrambled))
+
+JSD_2 <- model_human_2 %>%
+  group_by(scenario, scrambled_scenario, run) %>%
+  mutate(JSD = JSD(rbind(prob, human_prop)),
+         JSD_scrambled = JSD(rbind(prob, human_prop_scrambled))) %>%
+  ungroup() 
+
+mean_JSD_2_human_model <- JSD_2 %>%
+  summarise(mean(JSD))
+
+mean_JSD_2_human_scrambled_model <- JSD_2 %>%
+  summarise(mean(JSD_scrambled))
+
+t.test(JSD_2$JSD, JSD_2$JSD_scrambled)
+```
+We compute JSDs between human data and LLMs for Case Study 2.
+
+```{r JSDs-LLMs-2}
+llm_2_props <- df_llms_cs2 %>%
+  filter(itemName %in% scenarios_2) %>%
+  mutate(model = paste(prompt, model, sep = "_")) %>%
+  group_by(model, itemName, answerType) %>%
+  count() %>%
+  ungroup() %>%
+  group_by(model, itemName) %>%
+  mutate(model_prop = n/sum(n)) %>%
+  select(-n) %>%
+  ungroup() %>%
+  pivot_wider(names_from = model, values_from = model_prop) %>%
+  rename(one_shot_cot_llama_instruct = `one-shot CoT_Llama-3-70B-Inst.`,
+         zero_shot_llama_instruct = `zero-shot_Llama-3-70B-Inst.`) %>%
+  select(itemName, answerType, one_shot_cot_llama_instruct, zero_shot_llama_instruct) %>%
+  replace_na(list(one_shot_cot_llama_instruct = 0, zero_shot_llama_instruct = 0))
+
+all_models_human_2 <- model_2 %>%
+  rename(model_prob = prob) %>%
+  rename(itemName = scenario) %>%
+  complete(itemName, nesting(answerType)) %>%
+  left_join(df_human_cs2 %>% 
+              group_by(itemName, answerType) %>%
+              count() %>%
+              ungroup() %>%
+              group_by(itemName) %>%
+              mutate(human_prop = n/sum(n)), 
+            by = c("itemName", "answerType")) %>%
+  left_join(llm_2_props, by = c("itemName", "answerType")) %>%
+  replace_na(list(human_prop = 0, model_prob = 0,
+                  one_shot_cot_llama_instruct = 0,
+                  zero_shot_llama_instruct = 0)) 
+
+model_human_JSDs_2 <- all_models_human_2 %>%
+  group_by(itemName) %>%
+  summarise(JSD_human_RSA = JSD(rbind(human_prop, model_prob)),
+            JSD_human_one_shot = JSD(rbind(human_prop, one_shot_cot_llama_instruct)),
+            JSD_human_zero_shot = JSD(rbind(human_prop, zero_shot_llama_instruct)))
+
+t.test(model_human_JSDs_2$JSD_human_RSA, model_human_JSDs_2$JSD_human_one_shot)
+t.test(model_human_JSDs_2$JSD_human_RSA, model_human_JSDs_2$JSD_human_zero_shot)
+
+overall_JSDs_2 <- all_models_human_2 %>%
+  pivot_longer(c('model_prob','human_prop','one_shot_cot_llama_instruct',
+                 'zero_shot_llama_instruct'), names_to = 'agent',
+               values_to = 'prop') %>%
+  group_by(agent, answerType) %>%
+  summarise(sum = sum(prop)) %>%
+  ungroup() %>%
+  group_by(agent) %>%
+  mutate(prop = sum/sum(sum)) %>%
+  select(-sum) %>%
+  pivot_wider(names_from = "agent", values_from = prop) %>% 
+  summarise(human_zero_llama_JSD = JSD(rbind(human_prop, zero_shot_llama_instruct)),
+            human_oneshot_llama_JSD = JSD(rbind(human_prop, one_shot_cot_llama_instruct)),
+            human_RSA_JSD = JSD(rbind(human_prop, model_prob)))
+```
+
+
+
 
 ## Case study 3
 We calculate the JSD between the proportions of different response categories in human data and data of all models for case study 3. We use the high-level response categories, not the mentioning proportions of the single options, since they are non-exclusive.
@@ -145,6 +295,137 @@ cs3_humans_summary <- df_cs3_combined %>%
 
 jsd_cs3 <- map_dfc(cs3_models_summary %>% select(-answerType), 
                    ~ philentropy::JSD(rbind(.x, cs3_humans_summary$prop)))
+```
+
+We compute itemwise JSDs between human data and our model (PRIOR-PQ) for Case Study 3.
+
+```{r itemwise-JSDs-PRIORPQ-3}
+scenarios_3 <- unique(df_human_cs3$itemName)
+
+empirical_3_summary <- df_human_cs3 %>%
+  filter(category != 'yes') %>%
+  filter(category != 'other') %>%
+  filter(answerType != "unclassified") %>%
+  rename(scenario = itemName) %>%
+  group_by(scenario, answerType) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  group_by(scenario) %>%
+  mutate(human_prop = n/sum(n)) %>%
+  select(-n)
+
+scenarios_3_rep <- data.frame(scenario = rep_len(scenarios_3, 1000))
+scrambled_scenarios_3 <- data.frame(scenario = scenarios_3_rep$scenario, 
+                                    scrambled_scenario = sample(scenarios_3_rep$scenario)) %>%
+  mutate(run = 1:n())
+
+model_3 <- model_preds_3 %>%
+  select(scenario, support, prob) %>%
+  filter(scenario %in% scenarios_3) %>%
+  dplyr::mutate(
+    answerType = dplyr::case_when(
+      support == "taciturn" ~ 'taciturn',
+      support == "competitor" ~ 'competitor',
+      support == "sameCat" ~ 'same category',
+      support == "otherCat" ~ 'other category',
+      support == "mostSimilar" ~ 'most similar',
+      support == "exhaustive" ~ 'exhaustive',
+      .default = "other response"
+    ) %>% factor(levels = answerOrder)) %>%
+  filter(answerType != "unclassified") %>%
+  group_by(scenario, answerType) %>%
+  summarise(prob = sum(prob)) %>%
+  ungroup() %>%
+  group_by(scenario) %>%
+  mutate(prob = prob/sum(prob)) %>%
+  ungroup() %>%
+  complete(answerType, nesting(scenario)) 
+
+model_human_3 <- scrambled_scenarios_3 %>%
+  left_join(model_3, by = c("scenario")) %>%
+  left_join(empirical_3_summary, by = c("scenario", "answerType")) %>%
+  left_join(empirical_3_summary %>% rename(human_prop_scrambled = human_prop), 
+            by = c("scrambled_scenario" = "scenario", "answerType")) %>%
+  replace_na(list(human_prop = 0, human_prop_scrambled = 0, prob = 0))
+
+# check if all sum to 1
+model_human_3 %>% group_by(scenario, scrambled_scenario, run) %>%
+  summarise(model_prop = sum(prob),
+            human_prob = sum(human_prop),
+            human_prop_scrambled = sum(human_prop_scrambled))
+
+JSD_3 <- model_human_3 %>%
+  group_by(scenario, scrambled_scenario, run) %>%
+  mutate(JSD = JSD(rbind(prob, human_prop)),
+         JSD_scrambled = JSD(rbind(prob, human_prop_scrambled))) %>%
+  ungroup()
+
+mean_JSD_3_human_model <- JSD_3 %>%
+  summarise(mean(JSD))
+
+mean_JSD_3_human_scrambled_model <- JSD_3 %>%
+  summarise(mean(JSD_scrambled))
+
+t.test(JSD_3$JSD, JSD_3$JSD_scrambled)
+```
+We compute JSDs between human data and LLMs.
+
+```{r JSDs-LLMs-cs3}
+llm_3_props <- df_llms_cs3 %>%
+  filter(itemName %in% scenarios_3) %>%
+  mutate(model = paste(prompt, model, sep = "_")) %>%
+  group_by(model, itemName, answerType) %>%
+  count() %>%
+  ungroup() %>%
+  group_by(model, itemName) %>%
+  mutate(model_prop = n/sum(n)) %>%
+  select(-n) %>%
+  ungroup() %>%
+  pivot_wider(names_from = model, values_from = model_prop) %>%
+  rename(one_shot_cot_mixtral_instruct = `one-shot CoT_Mixtral-Inst.`,
+         zero_shot_mixtral_instruct = `zero-shot_Mixtral-Inst.`) %>%
+  select(itemName, answerType, one_shot_cot_mixtral_instruct, zero_shot_mixtral_instruct) %>%
+  replace_na(list(one_shot_cot_mixtral_instruct = 0, zero_shot_mixtral_instruct = 0))
+
+all_models_human_3 <- model_3 %>%
+  rename(model_prob = prob,
+         itemName = scenario) %>%
+  complete(itemName, nesting(answerType)) %>%
+  left_join(df_human_cs3 %>% 
+              group_by(itemName, answerType) %>%
+              count() %>%
+              ungroup() %>%
+              group_by(itemName) %>%
+              mutate(human_prop = n/sum(n)), 
+            by = c("itemName", "answerType")) %>%
+  left_join(llm_3_props, by = c("itemName", "answerType")) %>%
+  replace_na(list(human_prop = 0, model_prob = 0,
+                  one_shot_cot_mixtral_instruct = 0,
+                  zero_shot_mixtral_instruct = 0)) 
+
+model_human_JSDs_3 <- all_models_human_3 %>%
+  group_by(itemName) %>%
+  summarise(JSD_human_RSA = JSD(rbind(human_prop, model_prob)),
+            JSD_human_one_shot = JSD(rbind(human_prop, one_shot_cot_mixtral_instruct)),
+            JSD_human_zero_shot = JSD(rbind(human_prop, zero_shot_mixtral_instruct)))
+
+t.test(model_human_JSDs_3$JSD_human_RSA, model_human_JSDs_3$JSD_human_one_shot)
+t.test(model_human_JSDs_3$JSD_human_RSA, model_human_JSDs_3$JSD_human_zero_shot)
+
+overall_JSDs_3 <- all_models_human_3 %>%
+  pivot_longer(c('model_prob','human_prop','one_shot_cot_mixtral_instruct',
+                 'zero_shot_mixtral_instruct'), names_to = 'agent',
+               values_to = 'prop') %>%
+  group_by(agent, answerType) %>%
+  summarise(sum = sum(prop)) %>%
+  ungroup() %>%
+  group_by(agent) %>%
+  mutate(prop = sum/sum(sum)) %>%
+  select(-sum) %>%
+  pivot_wider(names_from = "agent", values_from = prop) %>% 
+  summarise(human_zero_mixtral_JSD = JSD(rbind(human_prop, zero_shot_mixtral_instruct)),
+            human_oneshot_mixtral_JSD = JSD(rbind(human_prop, one_shot_cot_mixtral_instruct)),
+            human_RSA_JSD = JSD(rbind(human_prop, model_prob)))
 ```
 
 Below, we plot the JSDs for both experiments.

@@ -1,26 +1,14 @@
-var best_params = Infer({method: 'MCMC', burn: 100, samples: 5000, onlyMAP: true, model: function() {
+var best_params = Infer({method: 'MCMC', samples: 5000, onlyMAP: true, model: function() {
     var params =
 	{
             policyAlpha     : uniformDrift({a: 0, b: 10, width: 0.5}),
             questionerAlpha : uniformDrift({a: 0, b: 10, width: 0.5}),
-            R1Alpha         : uniformDrift({a: 0, b: 50, width: 0.5}),
+            R1Alpha         : uniformDrift({a: 0, b: 10, width: 0.5}),
             relevanceBetaR1 : uniformDrift({a: 0, b: 1, width: 0.5}),
             costWeight      : uniformDrift({a: 0, b: 5, width: 0.5}),
-	    	failure         : uniformDrift({a: -10, b: 10, width: 1}),
+	    failure         : uniformDrift({a: 0, b: 10, width: 1}),
             questionCost    : 0
 	}
-
-    // var params =
-    // 	{
-    //         policyAlpha     : 5.7,
-    //         questionerAlpha : 9.8,
-    //         R1Alpha         : 2.0, 
-    //         relevanceBetaR1 : 0.95,
-    //         costWeight      : 1.9, 
-    // 	    failure         : 2.6,
-    // 	    exhaustification: 51,
-    //         questionCost    : 0,
-    // 	}
 
     var contextTarget = extend(
 	tsoContext,
@@ -58,6 +46,7 @@ var best_params = Infer({method: 'MCMC', burn: 100, samples: 5000, onlyMAP: true
 		 params.failure;
 	 }}
     )
+
 
     var contextOtherCat = extend(
 	tsoContext,
@@ -102,11 +91,11 @@ var best_params = Infer({method: 'MCMC', burn: 100, samples: 5000, onlyMAP: true
     var sameCatError = Gaussian({mu: Math.log(0.168), sigma: .1}).score(R1PredictionReduced.score('sameCat'))
     var exhaustiveError = Gaussian({mu: Math.log(0.101), sigma: .1}).score(R1PredictionReduced.score('exhaustive'))
     var otherCatError = Gaussian({mu: Math.log(0.014), sigma: .1}).score(R1PredictionReduced.score('otherCat')) 
-    var mse = taciturnError + competitorError + sameCatError + otherCatError // exhaustiveError 
+    var mse = taciturnError + competitorError + sameCatError + otherCatError 
     console.log(params)
     console.log('error:', mse)
     factor(mse)
-    return JSON.stringify(params)
+    return JSON.stringify(extend(params, {error: mse}))
 }})
 
 console.log(best_params)
