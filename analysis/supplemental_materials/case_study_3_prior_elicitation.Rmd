@@ -27,8 +27,19 @@ The rated options are categorized as competitor 1 (anticipated to be the best al
 answerOrder <- c('itemQuestion', 'competitor', 'mostSimilar', 'sameCategory', 'otherCategory')
 
 df <- read_csv("../../data/human/case_study_3/e3_prior_elicitation_human.csv")
+remaining_utils <-  read_csv("~/Documents/PhD/03_gpt3_QA/magpie3-qa-overinfo-free-production/data+analysis/data_PT/CS3_missingUtils/results_16_PhilTrans-CS3-util-elicitation_PT_final.csv")
 # target number of subjects for full experiment: n = 24 * 20 / 4 = 120
 cat("Number of recruited subjects: ", df %>% pull(submission_id) %>% unique() %>% length())
+
+# descriptive stats of remaining utils
+remaining_utils %>% count(itemName, targetOption)
+
+# sample only one participant per itemName x targetOption combination
+remaining_utils_clean <- remaining_utils %>%
+  filter(trial_type == "main") %>%
+  group_by(itemName, targetOption) %>% sample_n(., 1)
+
+remaining_utils_clean %>% count(itemName, targetOption)
 ```
 
 ```{r}
@@ -39,6 +50,15 @@ cat("Numbrer of main trial data points that are used for analysis: ", nrow(df_cl
 
 
 df_clean_main_long <- df_clean_main %>%
+  select(itemName, trialNr, submission_id, targetOption, itemQuestion, competitor, sameCategory, otherCategory, mostSimilar) %>%
+   pivot_longer(cols = c(itemQuestion, competitor, sameCategory, otherCategory, mostSimilar), names_to = 'answerType', values_to = "response") %>%
+  mutate(
+    categorized_response = targetOption
+  ) 
+
+remaining_utils_main <- remaining_utils_clean %>%
+  filter(trial_type == "main") 
+remaining_utils_long <- remaining_utils_main %>%
   select(itemName, trialNr, submission_id, targetOption, itemQuestion, competitor, sameCategory, otherCategory, mostSimilar) %>%
    pivot_longer(cols = c(itemQuestion, competitor, sameCategory, otherCategory, mostSimilar), names_to = 'answerType', values_to = "response") %>%
   mutate(
@@ -103,6 +123,10 @@ context_nr_names <- read_csv("../../data/human/case_study_3/e3_free_production_h
   
 df_clean_main_long_wContext <- left_join(df_clean_main_long, context_nr_names,
                                          by=c("itemName"))
+
+remaining_utils_long_wContext <- left_join(remaining_utils_long, context_nr_names,
+                                         by=c("itemName"))
+
 # add context number information
 df_clean_main_summary_byContext <- df_clean_main_long_wContext %>%
   group_by(answerType, context_nr) %>%
@@ -142,4 +166,35 @@ df_clean_main_long %>%
   ylab("Rating of alternative") +
   ylim(0, 100) +
   xlab("Category of alternative")
+```
+
+## Exploration of additional utilitites
+```{r}
+remaining_utils_summary_wContext <- remaining_utils_long_wContext %>%
+  group_by(targetOption, answerType, context_nr) %>%
+  tidyboot_mean(column = response)
+
+remaining_utils_summary_wContext %>%
+  mutate(answerType = factor(answerType, levels = answerOrder, labels = c("target", "competitor", "most similar", "similar option", "unrelated option")),
+         targetOption = factor(targetOption, levels = c("competitor", "mostSimilar", "sameCategory", "otherCategory"))) %>%
+  ggplot(., aes(x = answerType, y = mean, ymin = ci_lower, ymax = ci_upper, fill = context_nr)) +
+  geom_col(position = position_dodge()) +
+  facet_wrap(~targetOption) +
+  geom_errorbar(width = 0.2, position = position_dodge(width = 1)) +
+  theme(legend.position = "none", axis.text.x = element_text(angle=45, hjust=1)) +
+  xlab("rated option") +
+  ylab("rating")
+```
+
+```{r}
+# append the new utils to the old main file
+utils_file <- "../../data/human/case_study_3/e3_prior_elicitation_human.csv"
+old_utils <- read_csv(utils_file)
+colnames(old_utils)
+remaining_utils_main <- remaining_utils_main %>% select(-prolific_pid, -prolific_session_id, -prolific_study_id)
+nrow(old_utils)
+nrow(remaining_utils_main)
+combined_utils <- rbind(old_utils, remaining_utils_main)
+nrow(combined_utils)
+#combined_utils %>% write_csv(utils_file)
 ```
