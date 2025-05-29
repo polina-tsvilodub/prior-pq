@@ -33,13 +33,13 @@ urlfile = "https://raw.githubusercontent.com/magpie-ea/magpie3-qa-overinfo-free-
 empirical_responses <- read_csv(url(urlfile))
 
 urlfile = "https://raw.githubusercontent.com/magpie-ea/magpie3-qa-overinfo-free-production/main/data%2Banalysis/data/PragmaticQA-E2-priorElicitation-sliderRating-full_120.csv"
-priors <- read_csv(url(urlfile))
+priors <- read_csv(here('data/human/case_study_3/e3_prior_elicitation_human.csv'))
 scenarios <- unique(empirical_responses$itemName)
 
 full_matrix <- priors %>%
   filter(trial_type == "main") %>%
   select(submission_id, itemName, targetOption, mostSimilar,
-         itemQuestion, competitor, otherCategory, sameCategory) 
+         itemQuestion, competitor, otherCategory, sameCategory)
 
 
 #######################################
@@ -79,7 +79,6 @@ empiricalPrior <- function(scenario) {
     filter(itemName == scenario) %>%
     group_by(targetOption) %>%
     sample_n(1)
-  
   utils <- tibble(
     'utilTarget'       = these_priors$itemQuestion/10,
     'utilCompetitor'   = these_priors$competitor/10,

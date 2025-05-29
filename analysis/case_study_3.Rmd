@@ -53,7 +53,6 @@ answerOrder <- c('taciturn', 'competitor', 'sameCategory', 'otherCategory', 'mos
 answerLabels <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive', 'undefined responses', 'alternative')
 optionOrder <- c("competitor_c1", "competitor_c2", "mostSimilar", "otherCategory")
 modelAnswerOrder <- c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive')
-contexts <- df_human %>% group_by(itemName, settingName, context_nr) %>% tally() %>% select(-n)
 cbp1 <- c("#E69F00", "#56B4E9", "#009E73",
           "#F0E442", "#0072B2", "#D55E00", "#CC79A7", "#999999")
 
@@ -66,6 +65,8 @@ df_human <- read_csv("../data/human/case_study_3/e3_free_production_human_catego
                              levels = answerOrder, 
                              labels = c('taciturn', 'competitor', 'same category', 'other category', 'most similar', 'exhaustive', 'undefined responses', 'alternative'))) %>%
   mutate(prompt = "human", model = "Humans")
+
+contexts <- df_human %>% group_by(itemName, settingName, context_nr) %>% tally() %>% select(-n)
 
 df_llms <- read_csv("../data/llms/case_study_3/e3_llms_results_annotated.csv") %>%
   mutate(category = case_when(category == 'competitor_c1' ~ 'competitor',
@@ -81,7 +82,7 @@ df_llms <- read_csv("../data/llms/case_study_3/e3_llms_results_annotated.csv") %
 
 df_priorpq <- read_csv("../data/priorpq/case_study_3/c3_model_preds_full.csv") %>%
   mutate(model = "PRIOR-PQ") %>%
-  select(-policyAlpha, -questionerAlpha, -R1Alpha, -relevanceBetaR0,
+  select(-policyAlpha, -questionerAlpha, -R1Alpha, 
          -relevanceBetaR1, -costWeight, -failure, -questionCost) %>%
   rename(itemName = scenario, mentioned_option_proportion = prob) %>%
   left_join(contexts) %>%
@@ -200,7 +201,7 @@ df_combined_exploded_summary %>%
     model_prompt = ifelse(model_prompt == "human\nhuman", "Humans", model_prompt),
          `Mentioned option` = option_category) %>%
   mutate(model = factor(model, 
-                        levels = c("Humans", "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst."))
+                        levels = c("Humans", 'priorPQ', "GPT-3.5", "GPT-4", "Llama-3-70B-Inst.", "Mixtral-Inst."))
          ) %>%
   ggplot(., aes(x = `Mentioned option`, y = mentioned_option_proportion, fill = prompt)) +
   geom_col(position = position_dodge()) +

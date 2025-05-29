@@ -5,7 +5,6 @@
 // function to call when using RwebPPL
 var makeR = function(){
 
- // console.log("Starting task: ", RInput[0].task)
   console.log("R1Input", RInput)
   if (RInput[0].task == "TSOS") {
     // target-same-other-mostsimilar setting 
@@ -36,12 +35,73 @@ var makeR = function(){
       }}
     )
 
+    var contextCompetitor = extend(
+      tsosContext,
+      {name: "competitor",
+       decisionProblem : function(w, a) {
+        return _.includes(w, a) ?
+          (a == 'target' ? RInput[1].utilTarget :
+           a == 'competitor' ? RInput[1].utilCompetitor :
+           a == 'sameCat' ? RInput[1].utilSameCat :
+	   a == 'otherCat' ? RInput[1].utilOtherCat :
+	   RInput[1].utilMostSimilar) :
+	   params.failure;
+      }}
+    )
+
+
+    var contextSameCat = extend(
+      tsosContext,
+      {name: 'sameCat',
+       decisionProblem : function(w, a) {
+        return _.includes(w, a) ?
+          (a == 'target' ? RInput[2].utilTarget :
+           a == 'competitor' ? RInput[2].utilCompetitor :
+           a == 'sameCat' ? RInput[2].utilSameCat :
+	   a == 'otherCat' ? RInput[2].utilOtherCat :
+	   RInput[2].utilMostSimilar) :
+          params.failure
+      }}
+    )
+
+    var contextOtherCat = extend(
+      tsosContext,
+      {name: "otherCat",
+       decisionProblem : function(w, a) {
+        return _.includes(w, a) ?
+          (a == 'target' ? RInput[3].utilTarget :
+           a == 'competitor' ? RInput[3].utilCompetitor :
+           a == 'sameCat' ? RInput[3].utilSameCat :
+	   a == 'otherCat' ? RInput[3].utilOtherCat :
+	   RInput[3].utilMostSimilar) :
+          params.failure
+      }}
+    )
+
+    var contextMostSimilar = extend(
+      tsosContext,
+      {name: "mostSimilar",
+       decisionProblem : function(w, a) {
+        return _.includes(w, a) ?
+          (a == 'target' ? RInput[4].utilTarget :
+           a == 'competitor' ? RInput[4].utilCompetitor :
+           a == 'sameCat' ? RInput[4].utilSameCat :
+	   a == 'otherCat' ? RInput[4].utilOtherCat :
+	   RInput[4].utilMostSimilar) :
+          params.failure
+      }}
+    )
+
     var question = tsosContext.questions[0];
 
     // R1 uncertain
     var R1Prior = {
 	target: contextTarget,
-	distribution: Categorical({vs: ["target"]})
+	competitor: contextCompetitor,
+	sameCat: contextSameCat,
+	otherCat: contextOtherCat,
+	mostSimilar: contextMostSimilar,
+	distribution: Categorical({vs: ["target", "competitor", "sameCat", "otherCat", "mostSimilar"]})
     }
 
     var R1Prediction = R1Averager(tsosContext, R1Prior, question, params)
